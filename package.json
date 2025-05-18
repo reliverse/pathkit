@@ -1,6 +1,6 @@
 {
   "name": "@reliverse/pathkit-plus",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "description": "@reliverse/pathkit-plus is a utility library for @reliverse/pathkit, which extends the core library with a set of functions for manipulating file paths.",
   "scripts": {

@@ -7,14 +7,14 @@ export default defineConfig({
   $schema: "./schema.json",
 
   // General project information
-  projectName: "reinit",
+  projectName: "pathkit-plus",
   projectAuthor: "reliverse",
   projectDescription:
-    "@reliverse/reinit is your buddy for bootstrapping the boring stuff — so you can jump straight into building the good stuff.",
-  version: "0.1.0",
+    "@reliverse/pathkit-plus is a utility library for @reliverse/pathkit, which extends the core library with a set of functions for manipulating file paths.",
+  version: "1.0.0",
   projectLicense: "MIT",
   projectState: "creating",
-  projectRepository: "https://github.com/reinit",
+  projectRepository: "https://github.com/reliverse/pathkit",
   projectDomain: "https://example.com",
   projectCategory: "unknown",
   projectSubcategory: "unknown",

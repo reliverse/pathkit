@@ -1,82 +1,101 @@
-// Example usage of pathkit and pathkit-plus
-
-import { getFileImportsExports } from "~/impl.js";
-import {
-  normalize,
-  join,
-  resolve,
-  isAbsolute,
-  extname,
-  relative,
-  dirname,
-  format,
-  basename,
-  parse,
-  normalizeAliases,
-  resolveAlias,
-  reverseResolveAlias,
-  filename,
-  normalizeWindowsPath,
-} from "~/libs/pathkit/pathkit-mod.js";
+/**
+ *
+ * pathkit
+ * (default import example)
+ */
+import path from "~/libs/pathkit/pathkit-mod.js";
+/**
+ *
+ * pathkit
+ * (named import example)
+ */
+// import {
+//   normalize,
+//   resolve,
+//   isAbsolute,
+//   extname,
+//   relative,
+//   dirname,
+//   format,
+//   basename,
+//   parse,
+//   normalizeAliases,
+//   resolveAlias,
+//   reverseResolveAlias,
+//   filename,
+//   normalizeWindowsPath,
+//   normalizeString,
+//   toNamespacedPath,
+//   delimiter,
+//   posix,
+//   win32,
+//   join,
+//   sep,
+// } from "~/libs/pathkit/pathkit-mod.js";
+/**
+ *
+ * pathkit-plus
+ */
 import {
   extractPackageName,
   convertImportPaths,
   convertImportExtensionsJsToTs,
   normalizeQuotes,
   matchesGlob,
+  getFileImportsExports,
 } from "~/mod.js";
 
 async function main() {
   // pathkit path operations
   const messyPath = "src\\..\\./dist///file.js";
-  const fullPath = resolve(messyPath);
+  const fullPath = path.resolve(messyPath);
   console.log("resolve:", messyPath, "->", fullPath);
 
-  const joinedPath = join("users", "blefnk", "projects");
+  const joinedPath = path.join("users", "blefnk", "projects");
   console.log("join:", joinedPath);
 
-  const norm = normalize("foo//bar/../baz/");
+  const norm = path.normalize("foo//bar/../baz/");
   console.log("normalize:", norm);
 
-  const rel = relative("/a/b/c", "/a/d/e");
+  const rel = path.relative("/a/b/c", "/a/d/e");
   console.log("relative:", rel);
 
-  const abs = isAbsolute("/foo/bar");
+  const abs = path.isAbsolute("/foo/bar");
   console.log("isAbsolute:", abs);
 
-  const ext = extname("foo/bar/baz.txt");
+  const ext = path.extname("foo/bar/baz.txt");
   console.log("extname:", ext);
 
-  const dir = dirname("/foo/bar/baz.txt");
+  const dir = path.dirname("/foo/bar/baz.txt");
   console.log("dirname:", dir);
 
-  const base = basename("/foo/bar/baz.txt");
+  const base = path.basename("/foo/bar/baz.txt");
   console.log("basename:", base);
 
-  const parsed = parse("/foo/bar/baz.txt");
+  const parsed = path.parse("/foo/bar/baz.txt");
   console.log("parse:", parsed);
 
-  const formatted = format(parsed);
+  const formatted = path.format(parsed);
   console.log("format:", formatted);
 
   const globMatch = matchesGlob("foo/bar/baz.txt", "**/*.txt");
   console.log("matchesGlob:", globMatch);
 
-  const normWin = normalizeWindowsPath("C:\\foo\\bar");
+  const normWin = path.normalizeWindowsPath("C:\\foo\\bar");
   console.log("normalizeWindowsPath:", normWin);
 
   // alias utilities
   const aliases = { "@/": "/src/", "~/": "/home/user/" };
-  const normAliases = normalizeAliases(aliases);
+  const normAliases = path.normalizeAliases(aliases);
   console.log("normalizeAliases:", normAliases);
 
-  const resolvedAlias = resolveAlias("~/docs/readme.md", aliases);
+  const resolvedAlias = path.resolveAlias("~/docs/readme.md", aliases);
   console.log("resolveAlias:", resolvedAlias);
 
-  const reversed = reverseResolveAlias("/src/utils/index.ts", aliases);
+  const reversed = path.reverseResolveAlias("/src/utils/index.ts", aliases);
   console.log("reverseResolveAlias:", reversed);
 
-  const fname = filename("/some/very/long/path/to/my-component.vue");
+  const fname = path.filename("/some/very/long/path/to/my-component.vue");
   console.log("filename:", fname);
 
   // pathkit: extractPackageName
