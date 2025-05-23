@@ -1,36 +1,32 @@
 {
-  "name": "@reliverse/pathkit-plus",
-  "version": "1.0.1",
+  "name": "@reliverse/pathkit",
+  "version": "1.1.5",
   "type": "module",
-  "description": "@reliverse/pathkit-plus is a utility library for @reliverse/pathkit, which extends the core library with a set of functions for manipulating file paths.",
+  "description": "@reliverse/pathkit is a slash‑consistent, cross‑platform path manipulation, with POSIX forward slash, drop‑in for node:path and unjs/pathe. This library extends the node:path module with a set of functions for manipulating file paths.",
   "scripts": {
-    "pub": "dler pub",
-    "dev": "bun example/e-mod.ts",
+    "dev": "bun e-mod.ts",
+    "pub": "bun tests && dler pub",
     "latest": "bun update --latest && bun check",
-    "check": "tsc --noEmit && eslint --cache --fix . && biome check --fix --unsafe . && knip"
+    "check": "tsc --noEmit && eslint --cache --fix . && biome check --fix --unsafe . && knip",
+    "tests": "bun test ./.tests"
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",
     "@eslint/js": "^9.27.0",
-    "@reliverse/cli-cfg": "^1.6.5",
-    "@reliverse/dler": "^1.3.6",
+    "@reliverse/dler": "^1.4.6",
+    "@reliverse/relifso": "^1.3.0",
+    "@reliverse/relinka": "^1.4.7",
+    "@reliverse/rematch": "^1.1.0",
     "@stylistic/eslint-plugin": "^4.2.0",
-    "@types/bun": "^1.2.13",
-    "@types/fs-extra": "^11.0.4",
-    "@types/node": "^22.15.18",
+    "@types/bun": "^1.2.14",
+    "@types/node": "^22.15.21",
     "eslint": "^9.27.0",
     "eslint-plugin-no-relative-import-paths": "^1.6.1",
     "eslint-plugin-perfectionist": "^4.13.0",
-    "knip": "^5.56.0",
-    "typescript": "^5.8.3",
-    "typescript-eslint": "^8.32.1"
-  },
-  "dependencies": {
-    "@reliverse/relinka": "^1.4.5",
-    "fs-extra": "^11.3.0",
+    "knip": "^5.57.2",
     "magic-string": "^0.30.17",
     "p-map": "^7.0.3",
-    "pathe": "^2.0.3",
-    "zeptomatch": "^2.0.1"
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.32.1"
   }
 }

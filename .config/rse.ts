@@ -1,4 +1,5 @@
-import { defineConfig } from "@reliverse/cli-cfg";
+// @ts-expect-error TODO: temp
+import { defineConfig } from "@reliverse/rse";
 
 export default defineConfig({
   // RELIVERSE CONFIG (https://docs.reliverse.org/cli)
@@ -7,11 +8,11 @@ export default defineConfig({
   $schema: "./schema.json",
 
   // General project information
-  projectName: "pathkit-plus",
+  projectName: "pathkit",
   projectAuthor: "reliverse",
   projectDescription:
-    "@reliverse/pathkit-plus is a utility library for @reliverse/pathkit, which extends the core library with a set of functions for manipulating file paths.",
-  version: "1.0.0",
+    "@reliverse/pathkit is a slash‑consistent, cross‑platform path manipulation, with POSIX forward slash, drop‑in for node:path and unjs/pathe. This library extends the node:path module with a set of functions for manipulating file paths.",
+  version: "1.1.5",
   projectLicense: "MIT",
   projectState: "creating",
   projectRepository: "https://github.com/reliverse/pathkit",

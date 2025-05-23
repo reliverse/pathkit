@@ -1,45 +1,41 @@
 # pathkit • cross‑platform path manipulation
 
-> @reliverse/pathkit is a slash‑consistent, cross‑platform path manipulation—drop‑in for `node:path`, always POSIX "/".
+> @reliverse/pathkit is a slash‑consistent, cross‑platform path manipulation, with POSIX forward slash, drop‑in for node:path and unjs/pathe. This library extends the node:path module with a set of functions for manipulating file paths.
 
 [sponsor](https://github.com/sponsors/blefnk) • [discord](https://discord.gg/Pb8uKbwpsJ) • [npm](https://npmjs.com/package/@reliverse/pathkit) • [repo](https://github.com/reliverse/pathkit)
 
 ## Key Features
 
-- 🔹 **`node:path` on Steroids** – `@reliverse/pathkit`: drop in and replace `node:path` instantly.
-- ➕ **`unjs/pathe` on Steroids** – `@reliverse/pathkit-plus`: alias resolution, import parsing, and more.
-- 🌀 **Always `/`** – POSIX separators 100% of the time (buh‑bye `\\`).
-- ⚙️ **Node.js API compatible** – familiar methods, no learning curve.
-- 🚀 **Modern & Fast** – TypeScript, pure ESM, Bun & Node‑ready.
-- 🧠 **Predictable & Testable** – deterministic output across Windows / macOS / Linux.
+- 🔹 **drop in** and replace `node:path` and `unjs/pathe` instantly
+- ➕ **`unjs/pathe` on steroids** – alias resolution, import parsing, and more
+- 🌀 **always `/`** – posix separators 100% of the time (buh‑bye `\\`)
+- ⚙️ **node.js api compatible** – familiar methods, no learning curve
+- 🚀 **modern & fast** – typescript, pure esm, bun & node‑ready
+- 🧠 **predictable & testable** – deterministic output across windows / macos / linux
+- 🧼 **no dependencies** – just better path api + couple of cool utilities = [4kB](https://bundlephobia.com/package/@reliverse/pathkit@latest)
 
 ## Installation
 
 ```bash
 # bun • pnpm • yarn • npm
 bun add @reliverse/pathkit
-bun add -D @reliverse/pathkit-plus
 ```
-
-_In most cases_ you may need to install `@reliverse/pathkit` as **regular dependency**.
-_In most cases_ you may need to install `@reliverse/pathkit-plus` as **dev dependency**.
 
 **Migrate**:
 
 ```bash
-bun rm pathe
 # soon:
 # bun add -D @reliverse/dler
-# bun dler pathkit path-to-pathkit
-# bun dler pathkit pathe-to-pathkit
+# bun dler migrate --lib path-to-pathkit
+# bun dler migrate --lib pathe-to-pathkit
 ```
 
-### `pathkit` vs `pathkit-plus`
+### `unjs/pathe` vs `@reliverse/pathkit`
 
 | Package | What you get | When to use |
 |---------|--------------|-------------|
-| **`@reliverse/pathkit`** | Core path API (POSIX everywhere) | You only need a drop‑in for `node:path` |
-| **`@reliverse/pathkit-plus`** | Everything in `pathkit` **+** advanced utilities | You need alias resolution, import transforms, etc. |
+| **`pathe`** | Path API only (with POSIX everywhere) | You only need a drop‑in for `node:path` |
+| **`pathkit`** | Everything in `pathe` **+** advanced utilities | You need alias resolution, import transforms, etc. |
 
 ## Why Pathkit? — The Problem with Native Paths
 
@@ -92,16 +88,16 @@ console.log(join("users", "blefnk"));    // → "users/blefnk"
 
 Say goodbye to `process.platform` conditionals 👋.
 
-## pathkit-plus Features
+## pathkit advanced features
 
-`@reliverse/pathkit-plus` extends the core functionality with powerful utilities for working with imports, aliases, and more.
+`@reliverse/pathkit` extends the core functionality of `node:path` with powerful utilities for working with imports, aliases, and more.
 
 ### Import/Export Analysis
 
 The `getFileImportsExports` function provides detailed analysis of ES module imports and exports:
 
 ```ts
-import { getFileImportsExports } from "@reliverse/pathkit-plus";
+import { getFileImportsExports } from "@reliverse/pathkit";
 
 const code = `
 import { ref } from "vue";
@@ -152,7 +148,7 @@ Features:
 Convert between different path formats:
 
 ```ts
-import { convertImportPaths } from "@reliverse/pathkit-plus";
+import { convertImportPaths } from "@reliverse/pathkit";
 
 await convertImportPaths({
   baseDir: "./src",
@@ -166,7 +162,7 @@ await convertImportPaths({
 ### Extension Conversion
 
 ```ts
-import { convertImportExtensionsJsToTs } from "@reliverse/pathkit-plus";
+import { convertImportExtensionsJsToTs } from "@reliverse/pathkit";
 
 await convertImportExtensionsJsToTs({
   dirPath: "./src",
@@ -181,7 +177,7 @@ import {
   normalizeAliases,
   resolveAlias,
   reverseResolveAlias
-} from "@reliverse/pathkit-plus";
+} from "@reliverse/pathkit";
 
 const aliases = { "@/": "/src/", "~/": "/home/user/" };
 
@@ -200,13 +196,11 @@ console.log(reverseResolveAlias("/src/utils", aliases));  // "@/utils"
 ```ts
 import {
   filename,               // Strip extension
-  extractPackageName,     // Get package name from import
   normalizeQuotes,        // Standardize quote style
   matchesGlob            // Test glob patterns
-} from "@reliverse/pathkit-plus";
+} from "@reliverse/pathkit";
 
 console.log(filename("/path/component.vue"));     // "component"
-console.log(extractPackageName("@scope/pkg"));    // "@scope/pkg"
 console.log(normalizeQuotes("import 'pkg'"));     // 'import "pkg"'
 console.log(matchesGlob("file.ts", "**/*.ts"));  // true
 ```

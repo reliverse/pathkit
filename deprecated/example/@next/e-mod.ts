@@ -3,7 +3,13 @@
  * pathkit
  * (default import example)
  */
-import path from "~/libs/pathkit/pathkit-mod.js";
+import path, {
+  normalizeAliases,
+  normalizeWindowsPath,
+  resolveAlias,
+  reverseResolveAlias,
+} from "~/mod.js";
+
 /**
  *
  * pathkit
@@ -32,10 +38,6 @@ import path from "~/libs/pathkit/pathkit-mod.js";
 //   join,
 //   sep,
 // } from "~/libs/pathkit/pathkit-mod.js";
-/**
- *
- * pathkit-plus
- */
 import {
   extractPackageName,
   convertImportPaths,
@@ -43,7 +45,7 @@ import {
   normalizeQuotes,
   matchesGlob,
   getFileImportsExports,
-} from "~/mod.js";
+} from "../../@dler/mod.js";
 
 async function main() {
   // pathkit path operations
@@ -81,18 +83,18 @@ async function main() {
   const globMatch = matchesGlob("foo/bar/baz.txt", "**/*.txt");
   console.log("matchesGlob:", globMatch);
 
-  const normWin = path.normalizeWindowsPath("C:\\foo\\bar");
+  const normWin = normalizeWindowsPath("C:\\foo\\bar");
   console.log("normalizeWindowsPath:", normWin);
 
   // alias utilities
   const aliases = { "@/": "/src/", "~/": "/home/user/" };
-  const normAliases = path.normalizeAliases(aliases);
+  const normAliases = normalizeAliases(aliases);
   console.log("normalizeAliases:", normAliases);
 
-  const resolvedAlias = path.resolveAlias("~/docs/readme.md", aliases);
+  const resolvedAlias = resolveAlias("~/docs/readme.md", aliases);
   console.log("resolveAlias:", resolvedAlias);
 
-  const reversed = path.reverseResolveAlias("/src/utils/index.ts", aliases);
+  const reversed = reverseResolveAlias("/src/utils/index.ts", aliases);
   console.log("reverseResolveAlias:", reversed);
 
   const fname = path.filename("/some/very/long/path/to/my-component.vue");

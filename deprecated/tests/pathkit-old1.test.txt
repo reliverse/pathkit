@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import fs from "fs-extra";
+import fs from "node:fs/promises";
 import os from "node:os";
-import path from "pathe";
 
-import { convertImportPaths, normalizeQuotes } from "~/impl.js";
+import path from "~/libs/pathkit/pathkit-mod.js";
+import { convertImportPaths, normalizeQuotes } from "~/mod.js";
 
 describe("Import Paths Converter", () => {
   let tempDir: string;
@@ -15,7 +15,7 @@ describe("Import Paths Converter", () => {
 
   // Clean up after tests
   afterEach(async () => {
-    await fs.remove(tempDir);
+    await fs.rm(tempDir, { recursive: true, force: true });
   });
 
   it("should convert relative imports to absolute imports", async () => {
@@ -218,5 +218,188 @@ export * from "./bar";`;
         toType: "relative",
       }),
     ).rejects.toThrow("aliasPrefix is required for alias path conversions");
+  });
+
+  it("should handle complex directory movements when converting alias to relative", async () => {
+    // Create a source directory structure similar to the reported issue
+    const srcDir = path.join(tempDir, "src");
+    const libsDir = path.join(srcDir, "libs");
+    const pathkitDir = path.join(libsDir, "pathkit");
+    const pathkitImplDir = path.join(pathkitDir, "pathkit-impl");
+    const internalDir = path.join(pathkitImplDir, "internal");
+
+    // Create the directory structure
+    await fs.mkdir(internalDir, { recursive: true });
+
+    // Create source files
+    const sourceFile = path.join(internalDir, "path.ts");
+    const targetFile = path.join(pathkitDir, "delete-me.ts");
+
+    // Create the files with content
+    await fs.writeFile(
+      sourceFile,
+      'import { deleteMe } from "~/libs/pathkit/delete-me.js";',
+    );
+    await fs.writeFile(targetFile, 'export const deleteMe = "test";');
+
+    // Create the output directory structure
+    const distTestDir = path.join(tempDir, "dist-test");
+    const pathkitImplOutDir = path.join(distTestDir, "pathkit-impl");
+    const internalOutDir = path.join(pathkitImplOutDir, "internal");
+
+    // Create the output directory structure
+    await fs.mkdir(internalOutDir, { recursive: true });
+
+    // Copy files to their new locations
+    const outputSourceFile = path.join(internalOutDir, "path.ts");
+    const outputTargetFile = path.join(distTestDir, "delete-me.ts");
+
+    await fs.copyFile(sourceFile, outputSourceFile);
+    await fs.copyFile(targetFile, outputTargetFile);
+
+    // Convert the paths
+    await convertImportPaths({
+      aliasPrefix: "~/",
+      baseDir: distTestDir,
+      distJsrDryRun: false,
+      fromType: "alias",
+      libsList: {},
+      toType: "relative",
+    });
+
+    // Read the modified file
+    const modifiedContent = await fs.readFile(outputSourceFile, "utf8");
+    expect(normalizeQuotes(modifiedContent)).toBe(
+      `import { deleteMe } from "../../delete-me.js";`,
+    );
+  });
+
+  it("should handle nested alias paths with common segments", async () => {
+    // Create a complex directory structure with common segments
+    const srcDir = path.join(tempDir, "src");
+    const commonDir = path.join(srcDir, "common");
+    const featureDir = path.join(srcDir, "features");
+    const utilsDir = path.join(commonDir, "utils");
+    const subFeatureDir = path.join(featureDir, "sub-feature");
+
+    // Create directories
+    await fs.mkdir(utilsDir, { recursive: true });
+    await fs.mkdir(subFeatureDir, { recursive: true });
+
+    // Create source files
+    const sourceFile = path.join(subFeatureDir, "component.ts");
+    const targetFile = path.join(utilsDir, "helper.ts");
+
+    // Write initial content
+    await fs.writeFile(
+      sourceFile,
+      `import { helper } from "~/common/utils/helper.js";`,
+    );
+    await fs.writeFile(targetFile, "export const helper = () => {};");
+
+    // Create output structure in dist
+    const distDir = path.join(tempDir, "dist");
+    const outFeatureDir = path.join(distDir, "features");
+    const outSubFeatureDir = path.join(outFeatureDir, "sub-feature");
+    const outUtilsDir = path.join(distDir, "utils");
+
+    // Create output directories
+    await fs.mkdir(outSubFeatureDir, { recursive: true });
+    await fs.mkdir(outUtilsDir, { recursive: true });
+
+    // Copy files to their new locations
+    const outputSourceFile = path.join(outSubFeatureDir, "component.ts");
+    const outputTargetFile = path.join(outUtilsDir, "helper.ts");
+
+    await fs.copyFile(sourceFile, outputSourceFile);
+    await fs.copyFile(targetFile, outputTargetFile);
+
+    // Convert the paths
+    await convertImportPaths({
+      aliasPrefix: "~/",
+      baseDir: distDir,
+      distJsrDryRun: false,
+      fromType: "alias",
+      libsList: {},
+      toType: "relative",
+    });
+
+    // Verify the conversion
+    const modifiedContent = await fs.readFile(outputSourceFile, "utf8");
+    expect(normalizeQuotes(modifiedContent)).toBe(
+      `import { helper } from "../../utils/helper.js";`,
+    );
+  });
+
+  it("should handle multiple alias imports with different movement patterns", async () => {
+    // Create a complex source structure
+    const srcDir = path.join(tempDir, "src");
+    const modulesDir = path.join(srcDir, "modules");
+    const sharedDir = path.join(srcDir, "shared");
+    const featureDir = path.join(modulesDir, "feature");
+    const utilsDir = path.join(sharedDir, "utils");
+    const helpersDir = path.join(sharedDir, "helpers");
+
+    // Create directories
+    await fs.mkdir(featureDir, { recursive: true });
+    await fs.mkdir(utilsDir, { recursive: true });
+    await fs.mkdir(helpersDir, { recursive: true });
+
+    // Create source files
+    const sourceFile = path.join(featureDir, "main.ts");
+    const utilFile = path.join(utilsDir, "format.ts");
+    const helperFile = path.join(helpersDir, "common.ts");
+
+    // Write initial content with multiple alias imports
+    const initialContent = [
+      'import { format } from "~/shared/utils/format.js";',
+      'import { helper } from "~/shared/helpers/common.js";',
+      'import type { Config } from "~/shared/utils/format.js";',
+    ].join("\n");
+    await fs.writeFile(sourceFile, initialContent);
+    await fs.writeFile(
+      utilFile,
+      "export const format = () => {}; export type Config = {};",
+    );
+    await fs.writeFile(helperFile, "export const helper = () => {};");
+
+    // Create output structure with different layout
+    const distDir = path.join(tempDir, "dist");
+    const outFeatureDir = path.join(distDir, "feature");
+    const outUtilsDir = path.join(distDir, "utils");
+
+    // Create output directories
+    await fs.mkdir(outFeatureDir, { recursive: true });
+    await fs.mkdir(outUtilsDir, { recursive: true });
+
+    // Copy files to their new locations with flattened structure
+    const outputSourceFile = path.join(outFeatureDir, "main.ts");
+    const outputUtilFile = path.join(outUtilsDir, "format.ts");
+    const outputHelperFile = path.join(outUtilsDir, "common.ts");
+
+    await fs.copyFile(sourceFile, outputSourceFile);
+    await fs.copyFile(utilFile, outputUtilFile);
+    await fs.copyFile(helperFile, outputHelperFile);
+
+    // Convert the paths
+    await convertImportPaths({
+      aliasPrefix: "~/",
+      baseDir: distDir,
+      distJsrDryRun: false,
+      fromType: "alias",
+      libsList: {},
+      toType: "relative",
+    });
+
+    // Verify the conversion handles all imports correctly
+    const modifiedContent = await fs.readFile(outputSourceFile, "utf8");
+    const expectedContent = [
+      'import { format } from "../utils/format.js";',
+      'import { helper } from "../utils/common.js";',
+      'import type { Config } from "../utils/format.js";',
+    ].join("\n");
+    expect(normalizeQuotes(modifiedContent.trim())).toBe(
+      normalizeQuotes(expectedContent.trim()),
+    );
   });
 });

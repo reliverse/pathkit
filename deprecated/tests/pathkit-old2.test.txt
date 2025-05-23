@@ -1,0 +1,99 @@
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import fs from "node:fs/promises";
+import os from "node:os";
+
+import path from "~/libs/core/mod.js";
+
+import { convertAliasedPath } from "../src/mod.js";
+
+describe("Import Paths Converter", () => {
+  let tempDir: string;
+
+  // Create a temporary directory
+  beforeEach(async () => {
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "pathkit-test-"));
+
+    // Create a mock tsconfig.json
+    const tsconfig = {
+      compilerOptions: {
+        paths: {
+          "~/*": ["./src/*"],
+          "@utils/*": ["./src/utils/*"],
+          "@config": ["./src/config.ts"],
+        },
+      },
+    };
+    await fs.writeFile(
+      path.join(tempDir, "tsconfig.json"),
+      JSON.stringify(tsconfig, null, 2),
+    );
+
+    // Create necessary directories and files
+    await fs.mkdir(path.join(tempDir, "src"), { recursive: true });
+    await fs.mkdir(path.join(tempDir, "src/utils"), { recursive: true });
+    await fs.writeFile(path.join(tempDir, "src/config.ts"), "");
+  });
+
+  // Clean up after tests
+  afterEach(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  it("should convert aliased paths with wildcards to relative paths", async () => {
+    // Mock the current working directory
+    const originalCwd = process.cwd();
+    process.chdir(tempDir);
+
+    try {
+      const result = await convertAliasedPath(
+        "~/components/Button",
+        "src/pages/index.ts",
+      );
+      expect(result).toBe("../components/Button");
+
+      const utilsResult = await convertAliasedPath(
+        "@utils/format",
+        "src/components/Button.ts",
+      );
+      expect(utilsResult).toBe("../utils/format");
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
+  it("should convert exact alias matches", async () => {
+    const originalCwd = process.cwd();
+    process.chdir(tempDir);
+
+    try {
+      const result = await convertAliasedPath(
+        "@config",
+        "src/components/Button.ts",
+      );
+      expect(result).toBe("../config.ts");
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
+  it("should return original path for non-aliased imports", async () => {
+    const originalCwd = process.cwd();
+    process.chdir(tempDir);
+
+    try {
+      const result = await convertAliasedPath(
+        "./utils/helper",
+        "src/components/Button.ts",
+      );
+      expect(result).toBe("./utils/helper");
+
+      const nodeModuleResult = await convertAliasedPath(
+        "lodash",
+        "src/components/Button.ts",
+      );
+      expect(nodeModuleResult).toBe("lodash");
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+});

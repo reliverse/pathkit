@@ -9,7 +9,7 @@ export default defineConfig({
   // Bump configuration
   bumpDisable: false,
   bumpFilter: ["package.json", ".config/rse.ts"],
-  bumpMode: "autoPatch",
+  bumpMode: "patch",
 
   // Common configuration
   commonPubPause: false,
@@ -20,7 +20,10 @@ export default defineConfig({
   coreDeclarations: true,
   coreEntryFile: "mod.ts",
   coreEntrySrcDir: "src",
-  // coreIsCLI: false,
+  coreIsCLI: {
+    enabled: false,
+    scripts: {},
+  },
 
   // JSR-only config
   distJsrAllowDirty: true,
@@ -42,22 +45,10 @@ export default defineConfig({
   // Publish specific dirs as separate packages
   // This feature is experimental at the moment
   // Please commit your changes before using it
-  libsActMode: "main-and-libs",
+  libsActMode: "main-project-only",
   libsDirDist: "dist-libs",
   libsDirSrc: "src/libs",
-  libsList: {
-    "@reliverse/pathkit": {
-      libDeclarations: true,
-      libDescription:
-        "@reliverse/pathkit delivers slash-consistent, cross-platform path manipulation that just works. Ensures predictable POSIX (/) separators everywhere, simplifying your code and eliminating OS-specific pathing issues.",
-      libDirName: "pathkit",
-      libMainFile: "pathkit/pathkit-mod.ts",
-      libPkgKeepDeps: false,
-      libTranspileMinify: true,
-      libPubPause: false,
-      libPubRegistry: "npm",
-    },
-  },
+  libsList: {},
 
   // Logger setup
   logsFileName: "logs/relinka.log",

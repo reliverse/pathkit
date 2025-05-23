@@ -4,6 +4,6 @@
 .DS_Store
 .eslintcache
 node_modules
-dist-jsr
-dist-libs
-dist-npm
+e-dist
+e-src
+dist*

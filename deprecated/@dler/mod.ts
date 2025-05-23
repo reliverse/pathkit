@@ -1,34 +1,235 @@
 import type { SourceMap } from "magic-string";
 
+import { readFile, writeFile, readdir, stat } from "@reliverse/relifso";
 import { relinka } from "@reliverse/relinka";
-import { readFile, writeFile, readdir, stat } from "fs-extra";
+import rematch from "@reliverse/rematch";
 import MagicString from "magic-string";
+import path from "node:path";
+import { normalize } from "node:path";
 import pMap from "p-map";
-import path from "pathe";
-import zeptomatch from "zeptomatch";
 
-import type {
-  LibConfigDeprecated,
-  ConvertImportPathsOptions,
-  ConvertImportExtensionsOptions,
-  GetFileImportsExportsOptions,
-  FileResult,
-  ProcessFileContentOptions,
-  PathTypeInfo,
-  ConversionOptions,
-  ConversionPair,
-  ConverterFunction,
-  ImportType,
-  ImportExportInfo,
-} from "./types.js";
+// ========================================
+// Types
+// ========================================
 
-import { normalize } from "./libs/pathkit/pathkit-mod.js";
+// ========================================
+// Type Definitions
+// ========================================
 
-const CONCURRENCY_DEFAULT = 5;
+/**
+ * Configuration for a library to be built and published as a separate package.
+ * Used when publishing multiple packages from a single repository.
+ *
+ * Deprecated: Will be removed coming soon.
+ */
+export interface LibConfigDeprecated {
+  /**
+   * When `true`, generates TypeScript declaration files (.d.ts) for NPM packages.
+   */
+  libDeclarations: boolean;
+
+  /**
+   * An optional description of the library, included in the dist's package.json.
+   * Provides users with an overview of the library's purpose.
+   *
+   * @example "Utility functions for data manipulation"
+   * @example "Core configuration module for the framework"
+   *
+   * @default `package.json`'s "description"
+   */
+  libDescription: string;
+
+  /**
+   * The directory where the library's dist files are stored.
+   *
+   * @default name is derived from the library's name after slash
+   */
+  libDirName: string;
+
+  /**
+   * The path to the library's main entry file.
+   * This file serves as the primary entry point for imports.
+   * The path should be relative to the project root.
+   * The full path to the library's main file is derived by joining `libsDirDist` with `main`.
+   *
+   * @example "my-lib-1/mod.ts"
+   * @example "my-lib-2/ml2-mod.ts"
+   * @example "src/libs/my-lib-3/index.js"
+   */
+  libMainFile: string;
+
+  /**
+   * Dependencies to include in the dist's package.json.
+   * The final output may vary based on `rmDepsMode` and `rmDepsPatterns`.
+   * Defines how dependencies are handled during publishing:
+   * - `string[]`: Includes only the specified dependencies.
+   * - `true`: Includes all dependencies from the main package.json.
+   * - `false` or `undefined`: Automatically determines dependencies based on imports.
+   *
+   * @example ["@reliverse/pathkit", "@reliverse/relifso"] - Only include these specific dependencies.
+   * @example true - Include all `dependencies` from the main package.json.
+   */
+  libPkgKeepDeps: boolean | string[];
+
+  /**
+   * When `true`, minifies the output to reduce bundle size.
+   * Recommended for production builds but may increase build time.
+   *
+   * @default true
+   */
+  libTranspileMinify: boolean;
+
+  /**
+   * When true, pauses publishing for this specific library (overridden by commonPubPause).
+   * If true, this library will be built but not published, even if other libs are published.
+   *
+   * @default false
+   */
+  libPubPause?: boolean;
+
+  /**
+   * The registry to publish the library to.
+   *
+   * @default "npm"
+   */
+  libPubRegistry?: "jsr" | "npm" | "npm-jsr";
+}
+
+/** Configuration options contextualizing a path conversion operation. */
+export interface ConversionOptions {
+  aliasPrefix: string; // The alias prefix (e.g., "~/") - normalized to end with '/'
+  baseDir: string; // The base directory for resolving aliases or relative paths (absolute path)
+  currentLibName?: string; // The name of the library the source file belongs to (for avoiding self-imports)
+  libsList: Record<string, LibConfigDeprecated>; // Map of library names to their configurations
+  sourceFile: string; // The full path to the file being processed
+  urlMap: Record<string, string>; // Map of bare import URLs to local paths
+  strip: string[]; // Array of path segments to remove from the start of converted paths
+}
+
+/** Function signature for a specific path conversion (e.g., absolute to relative). */
+export type ConverterFunction = (
+  importPath: string,
+  opts: ConversionOptions,
+) => string;
+
+/** Represents the type classification of an import path. */
+export type ImportType =
+  | "absolute" // Path starting with '/' or drive letter
+  | "alias" // Path starting with the configured alias prefix
+  | "bare" // Package name or URL (http/https)
+  | "dynamic" // The path string *inside* an `import()` call
+  | "module" // A reference (typically package name) to another library within the monorepo (defined in libsList)
+  | "relative"; // Path starting with './' or '../'
+
+/** String literal representing a specific conversion pair (e.g., "relative:alias"). */
+export type ConversionPair = `${ImportType}:${ImportType}`;
+
+/** Represents the result of processing a single file. */
+export interface FileResult {
+  filePath: string; // Path of the processed file
+  message: string; // Status message (e.g., "Processed", "No changes", error details)
+  success: boolean; // Indicates if processing completed without errors
+}
+
+/** Options for the `convertImportPaths` function. */
+export interface ConvertImportPathsOptions {
+  baseDir: string; // Directory to process files within
+  fromType: ImportType; // The type of import paths to convert from
+  toType: ImportType; // The type to convert import paths to
+  libsList: Record<string, LibConfigDeprecated>; // Required for module/bare conversions involving local packages
+  aliasPrefix?: string; // Required if fromType or toType is 'alias'
+  currentLibName?: string; // Optional: Context for 'module' conversion to avoid self-references
+  distJsrDryRun?: boolean; // If true, performs all checks but doesn't write changes
+  fileExtensions?: string[]; // File extensions to process (defaults to JS/TS(X))
+  generateSourceMap?: boolean; // If true, generates .map files alongside modified files
+  strip?: string[]; // Path segments to remove from the beginning of converted paths
+  urlMap?: Record<string, string>; // Map for converting bare URL imports to local paths
+}
+
+/** Options for the `convertImportExtensionsJsToTs` function. */
+export interface ConvertImportExtensionsOptions {
+  dirPath: string; // Directory to process files within
+  distJsrDryRun?: boolean; // If true, performs all checks but doesn't write changes
+  fileExtensions?: string[]; // File extensions to process (defaults to JS/TS(X))
+  generateSourceMap?: boolean; // If true, generates .map files alongside modified files
+}
+
+/** Options for internal file content processing. */
+export interface ProcessFileContentOptions {
+  distJsrDryRun?: boolean;
+  generateSourceMap?: boolean;
+}
+
+/**
+ * Options for filtering import statements
+ */
+export interface GetFileImportsOptions {
+  /** Limit results to specific import path types */
+  pathTypes?: ImportType[];
+  /** Maximum number of results to return for each specified path type */
+  limitPerType?: number;
+}
+
+/**
+ * Result of path type analysis
+ */
+export interface PathTypeInfo {
+  type: ImportType;
+  symbol: string | null;
+}
+
+/**
+ * Represents a single import or export statement with detailed information
+ */
+export interface ImportExportInfo {
+  /** The full original import/export statement */
+  statement: string;
+  /** The type of statement */
+  type: "static" | "dynamic" | "export";
+  /** The kind of statement */
+  kind: "import" | "export";
+  /** The source path/package being imported from or exported to (if any) */
+  source?: string;
+  /** The type of the path (if source exists) */
+  pathType?: ImportType;
+  /** The specific symbol used in the path (e.g., '@/', '~/', './', '../', null for bare/module imports) */
+  pathTypeSymbol?: string | null;
+  /** The imported/exported items */
+  specifiers?: {
+    /** The type of specifier */
+    type: "named" | "default" | "namespace" | "all";
+    /** The original name being imported/exported */
+    name: string;
+    /** The local alias if renamed, otherwise same as name */
+    alias?: string;
+    /** Whether this is a type import/export */
+    isType?: boolean;
+  }[];
+  /** Whether this is a type-only import/export statement */
+  isTypeOnly?: boolean;
+  /** Start position in the source code */
+  start: number;
+  /** End position in the source code */
+  end: number;
+}
+
+/**
+ * Options for filtering import/export statements
+ */
+export interface GetFileImportsExportsOptions {
+  /** Limit results to specific import path types */
+  pathTypes?: ImportType[];
+  /** Maximum number of results to return for each specified path type */
+  limitPerType?: number;
+  /** Filter by statement kind */
+  kind?: "import" | "export" | "all";
+}
 
 // ========================================
 // Constants
 // ========================================
+
+const CONCURRENCY_DEFAULT = 5;
 
 const DEBUG_MODE = false; // Toggles verbose logging for debugging path conversions
 const CWD = process.cwd(); // Cache current working directory
@@ -67,9 +268,9 @@ export function extractPackageName(
  * @param prefix - The alias prefix (e.g., "~", "~/").
  * @returns The normalized alias prefix (e.g., "~/").
  */
-function normalizeAliasPrefix(prefix: string): string {
-  return prefix.endsWith("/") ? prefix : `${prefix}/`;
-}
+// function normalizeAliasPrefix(prefix: string): string {
+//   return prefix.endsWith("/") ? prefix : `${prefix}/`;
+// }
 
 /**
  * Extracts a bare import URL (http/https) from an import statement string or path.
@@ -216,7 +417,30 @@ function convertAbsoluteToRelative(
 function convertAliasToAbsolute(ip: string, opts: ConversionOptions): string {
   if (!ip.startsWith(opts.aliasPrefix)) return ip;
   const subPath = ip.slice(opts.aliasPrefix.length);
-  return path.resolve(opts.baseDir, subPath); // resolve for absolute path
+
+  // First, resolve the path relative to baseDir
+  const absolutePath = path.resolve(opts.baseDir, subPath);
+
+  // If we're in a new output directory (e.g., dist), we need to preserve the directory structure
+  const sourceFileRelativeToBase = path.relative(opts.baseDir, opts.sourceFile);
+  if (sourceFileRelativeToBase) {
+    // Get the new base directory by walking up the directory structure
+    let newBaseDir = path.dirname(opts.sourceFile);
+    const sourceFileParts = sourceFileRelativeToBase.split(/[\\/]/);
+    // Walk up the same number of directories as the original relative path had segments
+    // minus 1 to account for the filename itself
+    for (let i = 0; i < sourceFileParts.length - 1; i++) {
+      newBaseDir = path.dirname(newBaseDir);
+    }
+
+    // Extract the relative path from the original alias path
+    const relativeToBase = subPath.split("/").filter(Boolean);
+
+    // Reconstruct the path in the new location
+    return path.resolve(newBaseDir, ...relativeToBase);
+  }
+
+  return absolutePath;
 }
 function convertAliasToBare(ip: string, opts: ConversionOptions): string {
   // "bare" means relative to CWD.
@@ -445,81 +669,130 @@ function convertSingleImportPath(
   fromType: ImportType,
   toType: ImportType,
   importPath: string,
-  options: Omit<ConversionOptions, "aliasPrefix"> & { aliasPrefix?: string }, // Make aliasPrefix optional initially
+  options: Omit<ConversionOptions, "aliasPrefix"> & { aliasPrefix?: string },
 ): string {
   // --- Prepare Full Conversion Options ---
-  // This ensures the ConversionOptions object passed to converters is complete.
   const fullOptions: ConversionOptions = {
-    baseDir: options.baseDir ?? CWD, // Default baseDir if not provided
-    libsList: options.libsList ?? {},
-    sourceFile: options.sourceFile,
-    urlMap: options.urlMap ?? {},
-    strip: options.strip ?? [],
-    currentLibName: options.currentLibName,
-    // Normalize alias prefix only if provided, default to empty string
-    aliasPrefix: options.aliasPrefix
-      ? normalizeAliasPrefix(options.aliasPrefix)
-      : "",
+    ...options,
+    aliasPrefix: options.aliasPrefix ?? "~/",
   };
 
-  // --- Identity Conversion Check ---
-  if (fromType === toType) {
-    return importPath; // No conversion needed
-  }
-
-  // --- Get Converter ---
+  // --- Get Conversion Function ---
   const conversionKey = `${fromType}:${toType}`;
   const converter = conversionMapping[conversionKey];
-
-  let convertedPath: string;
-  if (converter) {
-    convertedPath = converter(importPath, fullOptions);
-  } else {
-    relinka(
-      "verbose",
-      `No converter found for ${conversionKey} on path "${importPath}". Returning original.`,
-    );
-    convertedPath = importPath;
+  if (!converter) {
+    relinka("warn", `No converter found for ${fromType} -> ${toType}`);
+    return importPath;
   }
 
+  // --- Apply Conversion ---
+  let convertedPath = converter(importPath, fullOptions);
+
   // --- Post-processing (Strip) ---
-  if (fullOptions.strip.length > 0 && convertedPath !== importPath) {
+  if (
+    fullOptions.strip.length > 0 &&
+    convertedPath !== importPath &&
+    fullOptions.sourceFile
+  ) {
     let processedPath = convertedPath;
+    const importingFileDir = path.dirname(fullOptions.sourceFile);
+
+    // If we're converting from an alias path, we need to handle the case where
+    // both the importing and imported files have been moved to new locations
+    if (fromType === "alias" && fullOptions.baseDir) {
+      // First, resolve the absolute path of the target file in the source tree
+      const sourceTreeTarget = path.resolve(
+        fullOptions.baseDir,
+        importPath.slice(fullOptions.aliasPrefix.length),
+      );
+
+      // Calculate the relative position of both files relative to baseDir
+      const importingFileRelativeToBase = path.relative(
+        fullOptions.baseDir,
+        fullOptions.sourceFile,
+      );
+      const targetFileRelativeToBase = path.relative(
+        fullOptions.baseDir,
+        sourceTreeTarget,
+      );
+
+      // If both files have moved relative to baseDir, we need to adjust the path
+      if (importingFileRelativeToBase && targetFileRelativeToBase) {
+        // Get the new base directory (e.g., dist-test instead of src)
+        // Walk up the directory structure of the importing file until we find the new base
+        let newBaseDir = path.dirname(fullOptions.sourceFile);
+        const importingFileParts = importingFileRelativeToBase.split(/[\\/]/);
+        // Walk up the same number of directories as the original relative path had segments
+        // minus 1 to account for the filename itself
+        for (let i = 0; i < importingFileParts.length - 1; i++) {
+          newBaseDir = path.dirname(newBaseDir);
+        }
+
+        // Calculate where the target file should be in the new structure
+        const newTargetLocation = path.join(
+          newBaseDir,
+          path.basename(targetFileRelativeToBase),
+        );
+
+        // Calculate the relative path from the importing file to the new target location
+        processedPath = path
+          .relative(importingFileDir, newTargetLocation)
+          .replace(/\\/g, "/");
+
+        // Ensure it starts with ./ or ../
+        if (!processedPath.startsWith(".")) {
+          processedPath = `./${processedPath}`;
+        }
+
+        if (DEBUG_MODE) {
+          relinka(
+            "verbose",
+            `Adjusted path for moved files: ${processedPath} (from ${importingFileDir} to ${newTargetLocation})`,
+          );
+        }
+
+        convertedPath = processedPath;
+        return convertedPath;
+      }
+    }
+
+    // Original stripping logic for other cases
     for (const stripSegment of fullOptions.strip) {
-      // Normalize segment to strip (e.g., 'dist' -> 'dist/')
       const normalizedStripSegment = stripSegment.endsWith("/")
         ? stripSegment
         : `${stripSegment}/`;
-      // Remove the segment if it appears after any leading ../ or ./
-      // Find the index after all leading ../ or ./
       const leadingMatch = /^((\.\.\/|\.\/)+)/.exec(processedPath);
       const leading = leadingMatch ? leadingMatch[0] : "";
       const afterLeading = processedPath.slice(leading.length);
       if (afterLeading.startsWith(normalizedStripSegment)) {
-        processedPath =
-          leading + afterLeading.slice(normalizedStripSegment.length);
+        const strippedPath = afterLeading.slice(normalizedStripSegment.length);
+        processedPath = leading + strippedPath;
       }
     }
-    convertedPath = processedPath;
 
-    // --- Recalculate minimal relative path if result is still relative ---
+    // Verify path resolution
+    const preStripAbsoluteTarget = path.resolve(
+      importingFileDir,
+      convertedPath,
+    );
+    const postStripAbsoluteTarget = path.resolve(
+      importingFileDir,
+      processedPath,
+    );
+
     if (
-      convertedPath.startsWith(".") &&
-      fullOptions.sourceFile &&
-      !convertedPath.startsWith("./node_modules") // don't touch node_modules
+      normalize(preStripAbsoluteTarget) !== normalize(postStripAbsoluteTarget)
     ) {
-      // Resolve the absolute path of the import target
-      const importingFileDir = path.dirname(fullOptions.sourceFile);
-      const absoluteTarget = path.resolve(importingFileDir, convertedPath);
-      const minimalRelative = path
-        .relative(importingFileDir, absoluteTarget)
+      // If stripping would break the path, calculate direct relative path
+      processedPath = path
+        .relative(importingFileDir, preStripAbsoluteTarget)
         .replace(/\\/g, "/");
-      // Ensure it starts with ./ or ../
-      convertedPath =
-        minimalRelative.startsWith(".") || minimalRelative.startsWith("/")
-          ? minimalRelative
-          : `./${minimalRelative}`;
+      if (!processedPath.startsWith(".")) {
+        processedPath = `./${processedPath}`;
+      }
     }
+
+    convertedPath = processedPath;
   }
 
   return convertedPath;
@@ -556,7 +829,7 @@ async function processFileContent(
     if (!changesMade) {
       return {
         filePath,
-        message: `No changes needed for ${path.basename(filePath)}`,
+        message: "No matching import paths found",
         success: true,
       };
     }
@@ -899,7 +1172,7 @@ export async function convertImportPaths(
     distJsrDryRun = false,
     fileExtensions = DEFAULT_FILE_EXTENSIONS,
     generateSourceMap = false,
-    strip = [],
+    strip: userProvidedStrip,
     urlMap = {},
   } = options;
 
@@ -910,9 +1183,7 @@ export async function convertImportPaths(
   const baseDir = path.resolve(CWD, rawBaseDir); // Ensure absolute path
 
   if ((fromType === "alias" || toType === "alias") && !rawAliasPrefix) {
-    throw new Error(
-      "`aliasPrefix` is required when converting from/to 'alias' type.",
-    );
+    throw new Error("aliasPrefix is required for alias path conversions");
   }
 
   try {
@@ -928,6 +1199,137 @@ export async function convertImportPaths(
       throw new Error(`Specified baseDir does not exist: ${baseDir}`);
     }
     throw error; // Re-throw other errors (e.g., permissions)
+  }
+
+  // --- Determine strip segments ---
+  let strip = userProvidedStrip ? [...userProvidedStrip] : []; // Start with user provided or empty, ensure it's a new array
+
+  if (fromType === "alias") {
+    const autoStripPatterns = new Set<string>(strip); // Use a Set to avoid duplicates from user-provided and auto-generated
+    const derivedAliasPathSegments = new Set<string>();
+
+    // Determine a suitable ancestor directory for path.relative. Start with CWD as a fallback.
+    let ancestorDirForRelativePath = CWD;
+    const parentDir = path.dirname(baseDir);
+
+    if (
+      parentDir !== baseDir &&
+      parentDir !== path.dirname(parentDir) /* not fs root */
+    ) {
+      const grandParentDir = path.dirname(parentDir);
+      if (
+        grandParentDir !== parentDir &&
+        grandParentDir !== path.dirname(grandParentDir)
+      ) {
+        const greatGrandParentDir = path.dirname(grandParentDir);
+        // Check if greatGrandParentDir is distinct and not the fs root itself
+        if (
+          greatGrandParentDir !== grandParentDir &&
+          greatGrandParentDir !== path.dirname(greatGrandParentDir)
+        ) {
+          ancestorDirForRelativePath = greatGrandParentDir;
+        } else {
+          ancestorDirForRelativePath = grandParentDir; // Fallback to grandParent if greatGrand is root or same
+        }
+      } else {
+        ancestorDirForRelativePath = parentDir; // Fallback to parent if grandParent is root or same
+      }
+    } else if (baseDir !== CWD) {
+      // If baseDir is a direct child of fs root, or baseDir is CWD's child.
+      // Use parentDir (which could be fs root or CWD) if it's different from baseDir.
+      if (parentDir !== baseDir) {
+        ancestorDirForRelativePath = parentDir;
+      }
+    }
+
+    // Attempt 1: Structural path relative to the determined ancestor.
+    const structuralPath = path
+      .relative(ancestorDirForRelativePath, baseDir)
+      .replace(/\\/g, "/");
+    if (
+      structuralPath &&
+      structuralPath !== "." &&
+      !structuralPath.startsWith("..") &&
+      structuralPath !== "/"
+    ) {
+      derivedAliasPathSegments.add(structuralPath);
+    }
+
+    // Attempt 2: Basename of the alias resolution directory.
+    const baseDirName = path.basename(baseDir);
+    if (
+      baseDirName &&
+      baseDirName !== "." &&
+      !baseDirName.startsWith("..") &&
+      baseDirName !== "/"
+    ) {
+      derivedAliasPathSegments.add(baseDirName.replace(/\\/g, "/"));
+    }
+
+    // Fallback: If no segments derived yet, and baseDir is not CWD, use path relative to CWD.
+    if (derivedAliasPathSegments.size === 0 && baseDir !== CWD) {
+      const pathFromCwd = path.relative(CWD, baseDir).replace(/\\/g, "/");
+      if (
+        pathFromCwd &&
+        pathFromCwd !== "." &&
+        !pathFromCwd.startsWith("..") &&
+        pathFromCwd !== "/"
+      ) {
+        derivedAliasPathSegments.add(pathFromCwd);
+      }
+    }
+
+    if (derivedAliasPathSegments.size > 0) {
+      if (DEBUG_MODE) {
+        // Only log if verbosity is enabled via DEBUG_MODE
+        relinka(
+          "verbose",
+          `Derived alias base path segments for stripping: ${Array.from(derivedAliasPathSegments).join(", ")}`,
+        );
+      }
+
+      // Iterate over the derived core segments and add them to the strip patterns.
+      // The actual stripping logic in convertSingleImportPath handles leading ../ parts.
+      for (const segment of derivedAliasPathSegments) {
+        if (!segment) continue; // Should already be filtered, but as a safeguard
+
+        let pattern = segment.replace(/\\/g, "/"); // Ensure forward slashes
+
+        // Ensure it ends with a slash
+        if (!pattern.endsWith("/")) {
+          pattern = `${pattern}/`;
+        }
+        // Normalize potential double slashes (e.g. if a segment somehow was `/foo`)
+        pattern = pattern.replace(/\/\//g, "/");
+
+        // Add non-trivial and meaningful patterns
+        // (e.g. avoid adding just "/" or "./")
+        if (
+          pattern &&
+          pattern !== "/" &&
+          pattern !== "./" &&
+          pattern.length > 1
+        ) {
+          autoStripPatterns.add(pattern);
+        }
+      }
+    }
+
+    const originalUserStripCount = userProvidedStrip?.length ?? 0;
+    strip = Array.from(autoStripPatterns);
+
+    if (strip.length > originalUserStripCount) {
+      relinka(
+        "verbose",
+        `Using strip patterns for alias conversion: ${strip.join(", ")}`,
+      );
+    }
+  } else if (userProvidedStrip) {
+    // If not 'alias' fromType, just use userProvidedStrip if available
+    strip = [...userProvidedStrip];
+  } else {
+    // Default to no stripping if not 'alias' and no user strip provided
+    strip = [];
   }
 
   if (distJsrDryRun) {
@@ -1088,7 +1490,7 @@ export const matchesGlob = (
   path: string,
   pattern: string | string[],
 ): boolean => {
-  return zeptomatch(pattern, normalize(path));
+  return rematch(pattern, normalize(path));
 };
 
 /**

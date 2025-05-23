@@ -1,6 +1,10 @@
 {
   "compilerOptions": {
-    "paths": { "~/*": ["./src/*"] },
+    "paths": {
+      "~/*": ["./src/*"],
+      "@/*": ["./e-src/*"]
+    },
+
     "baseUrl": ".",
     "esModuleInterop": true,
     "skipLibCheck": true,
