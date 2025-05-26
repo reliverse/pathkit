@@ -55,15 +55,21 @@ export default defineConfig({
   logsFreshFile: true,
 
   // Dependency filtering
-  rmDepsMode: "patterns-and-devdeps",
-  rmDepsPatterns: [
-    "@types",
-    "biome",
-    "eslint",
-    "knip",
-    "prettier",
-    "@reliverse/cli-cfg",
-  ],
+  // Global is always applied
+  removeDepsPatterns: {
+    global: [
+      "@types",
+      "biome",
+      "eslint",
+      "knip",
+      "prettier",
+      "typescript",
+      "@reliverse/dler",
+    ],
+    "dist-npm": [],
+    "dist-jsr": [],
+    "dist-libs": {},
+  },
 
   // Build setup
   transpileEsbuild: "es2023",

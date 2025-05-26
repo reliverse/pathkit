@@ -5,6 +5,7 @@ import path, {
   convertImportsExt,
   attachPathSegmentsInDirectory,
   stripPathSegmentsInDirectory,
+  getFileImportsExports,
   type PathExtFilter,
 } from "~/mod.js";
 
@@ -125,10 +126,39 @@ async function createSampleFiles() {
   log("✓ created sample files in e-src");
 }
 
+async function analyzeImportsExports(filePath: string): Promise<void> {
+  const content = await fs.readFile(filePath, "utf-8");
+  const analysis = getFileImportsExports(content, {
+    kind: "all",
+    pathTypes: ["alias", "relative", "absolute", "bare", "module"],
+  });
+
+  log(`\n📊 Analysis for ${filePath}:`);
+  for (const info of analysis) {
+    const typePrefix = info.isTypeOnly ? "[type] " : "";
+    log(`  ${typePrefix}${info.kind} ${info.type}: ${info.statement}`);
+    if (info.specifiers?.length) {
+      for (const spec of info.specifiers) {
+        const specStr = spec.alias
+          ? `${spec.name} as ${spec.alias}`
+          : spec.name;
+        log(`    - ${spec.type}: ${specStr}`);
+      }
+    }
+  }
+}
+
 async function main(): Promise<void> {
   log("🚀 starting pathkit example");
   await cleanDirs([E_SRC, E_DIST]);
   await createSampleFiles();
+
+  // Demonstrate import/export analysis
+  log("\n📦 Example: Analyzing imports and exports");
+  const sampleFiles = samples.map((s) => path.join(E_SRC, `${s.file}.ts`));
+  for (const file of sampleFiles) {
+    await analyzeImportsExports(file);
+  }
 
   // Example: Attach lib prefix and strip segments
   log("\n📦 Example: Attaching lib prefix and stripping segments");
@@ -159,7 +189,7 @@ async function main(): Promise<void> {
     pathExtFilter: MODE,
   });
 
-  // Optional: Convert extensions if needed
+  // Convert extensions
   if (MODE === "js" && TEST_JS_TO_TS_CONVERSION) {
     log("\n📦 Converting extensions from .js to .ts");
     await convertImportsExt({

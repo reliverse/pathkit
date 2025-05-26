@@ -2,6 +2,13 @@ import type { PlatformPath } from "node:path";
 
 import fs from "node:fs/promises";
 
+import {
+  getFileImportsExports,
+  type ImportExportInfo,
+  type ImportExportSpecifier,
+  type GetFileImportsExportsOptions,
+} from "./impl/getFileImportsExports.js";
+
 // end-user logging
 const log = (msg: string) => console.log(`\x1b[2m${msg}\x1b[0m`);
 
@@ -1000,9 +1007,9 @@ async function convertImportsExt({
           const changes: { from: string; to: string }[] = [];
 
           // using regex to find and replace import paths
-          const matches = Array.from(content.matchAll(importRegex));
-
-          for (const match of matches) {
+          let match: RegExpExecArray | null;
+          match = importRegex.exec(content);
+          while (match !== null) {
             const quote = match[1];
             const importPath = match[2];
 
@@ -1031,6 +1038,8 @@ async function convertImportsExt({
             const replaceStr = `${quote}${replacementPath}${quote}`;
 
             updated = replaceAllInString(updated, searchStr, replaceStr);
+
+            match = importRegex.exec(updated);
           }
 
           if (content !== updated) {
@@ -1549,7 +1558,14 @@ const win32 = _platforms.win32;
 const delimiter =
   globalThis.process?.platform === "win32" ? ";" : (":" as const);
 
-export type { PlatformPath, PathExtFilter, ImportExtType };
+export type {
+  PlatformPath,
+  PathExtFilter,
+  ImportExtType,
+  ImportExportInfo,
+  ImportExportSpecifier,
+  GetFileImportsExportsOptions,
+};
 
 export {
   _pathBase as posix,
@@ -1579,6 +1595,7 @@ export {
   stripPathSegmentsInDirectory,
   attachPathSegments,
   attachPathSegmentsInDirectory,
+  getFileImportsExports,
 };
 
 export default path;

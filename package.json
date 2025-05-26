@@ -1,6 +1,6 @@
 {
   "name": "@reliverse/pathkit",
-  "version": "1.1.5",
+  "version": "1.1.6",
   "type": "module",
   "description": "@reliverse/pathkit is a slash‑consistent, cross‑platform path manipulation, with POSIX forward slash, drop‑in for node:path and unjs/pathe. This library extends the node:path module with a set of functions for manipulating file paths.",
   "scripts": {
@@ -13,17 +13,17 @@
   "devDependencies": {
     "@biomejs/biome": "1.9.4",
     "@eslint/js": "^9.27.0",
-    "@reliverse/dler": "^1.4.6",
+    "@reliverse/dler": "^1.5.6",
     "@reliverse/relifso": "^1.3.0",
     "@reliverse/relinka": "^1.4.7",
     "@reliverse/rematch": "^1.1.0",
-    "@stylistic/eslint-plugin": "^4.2.0",
+    "@stylistic/eslint-plugin": "^4.4.0",
     "@types/bun": "^1.2.14",
     "@types/node": "^22.15.21",
     "eslint": "^9.27.0",
     "eslint-plugin-no-relative-import-paths": "^1.6.1",
     "eslint-plugin-perfectionist": "^4.13.0",
-    "knip": "^5.57.2",
+    "knip": "^5.58.0",
     "magic-string": "^0.30.17",
     "p-map": "^7.0.3",
     "typescript": "^5.8.3",
