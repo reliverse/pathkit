@@ -12,7 +12,7 @@ import path, {
 const ALIAS = "@";
 const E_SRC = "e-src";
 const E_DIST = "e-dist";
-const MODE = "js" as PathExtFilter;
+const MODE = "none" as PathExtFilter;
 const TEST_JS_TO_TS_CONVERSION = false;
 
 // pick ext once per file
@@ -23,7 +23,7 @@ function getExt(): string {
   const choices = [".js", ".ts", ""];
   const ext = choices[Math.floor(Math.random() * choices.length)];
   console.log(`chose extension: ${ext || "(none)"}`);
-  return ext;
+  return ext ?? "";
 }
 
 // note: `file` has no extension here

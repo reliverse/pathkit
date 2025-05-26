@@ -39,6 +39,7 @@ export function convertAliasedPathToRelative(
       const remainingPathAfterAlias = match[1] || ""; // Captured part after wildcard, or empty if no wildcard
 
       const pathMappings = compilerOptions.paths[alias];
+      if (!pathMappings) continue;
       for (const mappingTemplate of pathMappings) {
         // Replace wildcard in mapping with the captured part from the aliased path
         const mappedPathSuffix = mappingTemplate.endsWith("/*")

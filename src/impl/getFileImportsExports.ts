@@ -77,7 +77,7 @@ export function getFileImportsExports(
     // handle namespace imports/exports (import * as name / export * as name)
     const namespaceMatch =
       /(?:import|export)\s+(?:type\s+)?\*\s+as\s+(\w+)/.exec(statement);
-    if (namespaceMatch) {
+    if (namespaceMatch?.[1]) {
       specifiers.push({
         type: "namespace",
         name: namespaceMatch[1],
@@ -90,7 +90,7 @@ export function getFileImportsExports(
     const defaultMatch = /import\s+(?:type\s+)?(\w+)(?:\s*,|\s+from)/.exec(
       statement,
     );
-    if (defaultMatch && !statement.includes("{")) {
+    if (defaultMatch?.[1] && !statement.includes("{")) {
       specifiers.push({
         type: "default",
         name: defaultMatch[1],
@@ -100,7 +100,7 @@ export function getFileImportsExports(
 
     // handle named imports/exports
     const namedMatch = /{([^}]*)}/.exec(statement);
-    if (namedMatch) {
+    if (namedMatch?.[1]) {
       const items = namedMatch[1]
         .split(",")
         .map((item) => item.trim())
@@ -109,10 +109,14 @@ export function getFileImportsExports(
       for (const item of items) {
         const typeMatch = /^type\s+(.+)/.exec(item);
         const actualItem = typeMatch ? typeMatch[1] : item;
+        if (!actualItem) continue;
+
         const isItemType = !!typeMatch || isTypeOnly;
 
         if (actualItem.includes(" as ")) {
           const [name, alias] = actualItem.split(" as ").map((p) => p.trim());
+          if (!name) continue;
+
           specifiers.push({
             type: "named",
             name,
@@ -142,7 +146,7 @@ export function getFileImportsExports(
       if (!source) continue;
 
       const pathType = getPathType(source);
-      if (!pathTypes.includes(pathType)) continue;
+      if (!pathType || !pathTypes.includes(pathType)) continue;
 
       const info: ImportExportInfo = {
         statement: match[0],
@@ -154,8 +158,8 @@ export function getFileImportsExports(
           pathType === "alias" ? /^[@~]/.exec(source)?.[0] : undefined,
         isTypeOnly: match[0].includes("import type"),
         specifiers: extractSpecifiers(match[0]),
-        start: match.index,
-        end: match.index + match[0].length,
+        start: match.index ?? 0,
+        end: (match.index ?? 0) + match[0].length,
       };
 
       results.push(info);
@@ -168,7 +172,7 @@ export function getFileImportsExports(
       if (!source) continue;
 
       const pathType = getPathType(source);
-      if (!pathTypes.includes(pathType)) continue;
+      if (!pathType || !pathTypes.includes(pathType)) continue;
 
       const info: ImportExportInfo = {
         statement: match[0],
@@ -180,8 +184,8 @@ export function getFileImportsExports(
           pathType === "alias" ? /^[@~]/.exec(source)?.[0] : undefined,
         isTypeOnly: false,
         specifiers: [],
-        start: match.index,
-        end: match.index + match[0].length,
+        start: match.index ?? 0,
+        end: (match.index ?? 0) + match[0].length,
       };
 
       results.push(info);
@@ -197,7 +201,7 @@ export function getFileImportsExports(
       if (!source) continue;
 
       const pathType = getPathType(source);
-      if (!pathTypes.includes(pathType)) continue;
+      if (!pathType || !pathTypes.includes(pathType)) continue;
 
       const info: ImportExportInfo = {
         statement: match[0],
@@ -209,8 +213,8 @@ export function getFileImportsExports(
           pathType === "alias" ? /^[@~]/.exec(source)?.[0] : undefined,
         isTypeOnly: match[0].includes("export type"),
         specifiers: extractSpecifiers(match[0]),
-        start: match.index,
-        end: match.index + match[0].length,
+        start: match.index ?? 0,
+        end: (match.index ?? 0) + match[0].length,
       };
 
       results.push(info);

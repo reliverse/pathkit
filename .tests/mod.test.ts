@@ -482,18 +482,21 @@ describe("regex patterns", () => {
     const test1 = `import Button from '@/components/Button'`;
     const matches1 = [...test1.matchAll(regex)];
     expect(matches1.length).toBe(1);
+    // @ts-expect-error testing error handling
     expect(matches1[0][2]).toBe("@/components/Button");
 
     // Named import
     const test2 = `import { foo, bar } from '@/utils'`;
     const matches2 = [...test2.matchAll(regex)];
     expect(matches2.length).toBe(1);
+    // @ts-expect-error testing error handling
     expect(matches2[0][2]).toBe("@/utils");
 
     // Dynamic import
     const test3 = `const mod = await import('@/dynamic/module')`;
     const matches3 = [...test3.matchAll(regex)];
     expect(matches3.length).toBe(1);
+    // @ts-expect-error testing error handling
     expect(matches3[0][2]).toBe("@/dynamic/module");
 
     // Should not match non-@ imports
@@ -513,18 +516,21 @@ describe("extension conversion regex", () => {
     const test1 = `import Button from '../components/Button.js'`;
     const matches1 = [...test1.matchAll(regex)];
     expect(matches1.length).toBe(1);
+    // @ts-expect-error testing error handling
     expect(matches1[0][2]).toBe("../components/Button.js");
 
     // Named import with js extension
     const test2 = `import { foo, bar } from '../utils/helpers.js'`;
     const matches2 = [...test2.matchAll(regex)];
     expect(matches2.length).toBe(1);
+    // @ts-expect-error testing error handling
     expect(matches2[0][2]).toBe("../utils/helpers.js");
 
     // Dynamic import with js extension
     const test3 = `const mod = await import('../dynamic/module.js')`;
     const matches3 = [...test3.matchAll(regex)];
     expect(matches3.length).toBe(1);
+    // @ts-expect-error testing error handling
     expect(matches3[0][2]).toBe("../dynamic/module.js");
 
     // Should not match imports without extensions
@@ -550,6 +556,7 @@ describe("edge cases", () => {
   });
 
   test("handle non-string inputs gracefully", () => {
+    // @ts-expect-error testing error handling
     expect(() => normalize(null)).toThrow();
     // @ts-expect-error testing error handling
     expect(() => join(123)).toThrow();

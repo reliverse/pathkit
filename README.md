@@ -94,7 +94,7 @@ Say goodbye to `process.platform` conditionals 👋.
 
 ### Import/Export Analysis
 
-The `getFileImportsExports` function provides detailed analysis of ES module imports and exports:
+The `getFileImportsExports` function provides detailed analysis of ES module imports and exports in your code:
 
 ```ts
 import { getFileImportsExports } from "@reliverse/pathkit";
@@ -103,22 +103,25 @@ const code = `
 import { ref } from "vue";
 import utils from "@/utils";
 import type { Config } from "./types";
+import * as React from "react";
+import { Button as UIButton } from "./components";
 export { default as MyComponent } from "./MyComponent";
+export type { Props } from "./types";
 `;
 
 const analysis = getFileImportsExports(code, {
   kind: "all",           // "import" | "export" | "all"
-  pathTypes: ["alias"],  // Filter by path types
+  pathTypes: ["alias"],  // Filter by path types: "alias" | "relative" | "absolute" | "bare" | "module"
   limitPerType: 2        // Limit results per type
 });
 ```
 
-The analysis provides rich information about each import/export:
+The analysis provides rich information about each import/export statement:
 
 ```ts
 interface ImportExportInfo {
   statement: string;           // Full original statement
-  type: "static" | "dynamic"; // Import type
+  type: "static" | "dynamic"; // Import type (static or dynamic import())
   kind: "import" | "export";  // Statement kind
   source?: string;            // Import/export source path
   pathType?: "alias" | "relative" | "absolute" | "bare" | "module";
@@ -137,11 +140,72 @@ interface ImportExportInfo {
 
 Features:
 
-- ✨ Handles all import/export syntax variants
-- 🔍 Type imports/exports support
-- 💬 Preserves comments
-- 🎯 Path type detection
-- 🔄 Multi-line statement support
+- ✨ **Comprehensive Syntax Support**
+  - Static imports (`import x from "y"`)
+  - Dynamic imports (`import("y")`)
+  - Named imports/exports (`import { x } from "y"`)
+  - Default imports/exports (`import x from "y"`)
+  - Namespace imports (`import * as x from "y"`)
+  - Re-exports (`export * from "y"`)
+  - Type imports/exports (`import type { x } from "y"`)
+
+- 🔍 **Path Analysis**
+  - Detects path types (alias, relative, absolute, bare, module)
+  - Extracts path prefixes (e.g., `@/`, `~/`)
+  - Preserves original path format
+
+- 🎯 **Specifier Details**
+  - Named imports/exports with aliases
+  - Default imports/exports
+  - Namespace imports
+  - Type-only imports/exports
+  - Mixed type and value imports
+
+- 📊 **Filtering Options**
+  - Filter by statement kind (import/export)
+  - Filter by path types
+  - Limit results per type
+  - Preserve statement order
+
+- 🛡️ **Type Safety**
+  - Full TypeScript support
+  - Detailed type definitions
+  - Null-safe operations
+
+Example output:
+
+```ts
+[
+  {
+    statement: 'import { ref } from "vue"',
+    type: "static",
+    kind: "import",
+    source: "vue",
+    pathType: "bare",
+    specifiers: [{
+      type: "named",
+      name: "ref"
+    }],
+    start: 0,
+    end: 24
+  },
+  {
+    statement: 'import type { Config } from "./types"',
+    type: "static",
+    kind: "import",
+    source: "./types",
+    pathType: "relative",
+    isTypeOnly: true,
+    specifiers: [{
+      type: "named",
+      name: "Config",
+      isType: true
+    }],
+    start: 45,
+    end: 85
+  }
+]
+```
 
 ### Path Transformation
 
@@ -162,13 +226,54 @@ await convertImportPaths({
 ### Extension Conversion
 
 ```ts
-import { convertImportExtensionsJsToTs } from "@reliverse/pathkit";
+import { convertImportsExt } from "@reliverse/pathkit";
 
-await convertImportExtensionsJsToTs({
-  dirPath: "./src",
-  generateSourceMap: true
+// Basic usage - convert all relative imports to .ts
+await convertImportsExt({
+  targetDir: "./src",
+  extFrom: "none",
+  extTo: "ts"
+});
+
+// Convert .js to .ts
+await convertImportsExt({
+  targetDir: "./src",
+  extFrom: "js",
+  extTo: "ts"
+});
+
+// Remove extensions
+await convertImportsExt({
+  targetDir: "./src",
+  extFrom: "ts",
+  extTo: "none"
+});
+
+// Handle alias paths (e.g. @/components)
+await convertImportsExt({
+  targetDir: "./src",
+  extFrom: "none",
+  extTo: "ts",
+  alias: "@" // or "@/*"
 });
 ```
+
+The function intelligently handles different import types:
+
+- ✅ Relative imports (`./file`, `../file`)
+- ✅ Alias imports (when alias is specified)
+- ❌ Package imports (`lodash`, `@scope/pkg`)
+- ❌ Node built-ins (`node:path`, `node:fs`)
+- ❌ URLs (`http://`, `https://`)
+- ❌ Already processed paths
+
+Features:
+
+- 🔄 Recursively processes directories
+- 🎯 Preserves package imports
+- 🛡️ Safe for code generation
+- 📝 Detailed change logging
+- 🎨 Supports custom aliases
 
 ### Alias Resolution
 

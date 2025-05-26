@@ -10,10 +10,23 @@ import {
 } from "./impl/getFileImportsExports.js";
 
 // end-user logging
-const log = (msg: string) => console.log(`\x1b[2m${msg}\x1b[0m`);
+const logger = (msg: string | (() => string), debugOnly = false) => {
+  if (!debugOnly || DEBUG_MODE) {
+    const message = typeof msg === "function" ? msg() : msg;
+    console.log(`\x1b[2m${message}\x1b[0m`);
+  }
+};
 
 // internal logging (all usage will be removed from final build by @reliverse/dler)
-const logInternal = (msg: string) => console.log(`\x1b[36;2m${msg}\x1b[0m`);
+const logInternal = (msg: string | (() => string)) => {
+  if (DEBUG_MODE) {
+    const message = typeof msg === "function" ? msg() : msg;
+    console.log(`\x1b[36;2m${message}\x1b[0m`);
+  }
+};
+
+// debug mode flag
+const DEBUG_MODE = false;
 
 // constants for configuration
 const EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
@@ -104,7 +117,7 @@ function normalizeString(path: string, allowAboveRoot: boolean): string {
 
   for (let index = 0; index <= path.length; ++index) {
     if (index < path.length) {
-      char = path[index];
+      char = path[index] ?? null;
     } else if (char === SLASH) {
       break;
     } else {
@@ -331,6 +344,8 @@ const relative = (from: string, to: string): string => {
   if (
     fromSegments.length > 0 &&
     toSegments.length > 0 &&
+    fromSegments[0] &&
+    toSegments[0] &&
     DRIVE_LETTER_RE.test(fromSegments[0]) &&
     DRIVE_LETTER_RE.test(toSegments[0]) &&
     fromSegments[0].toUpperCase() !== toSegments[0].toUpperCase()
@@ -611,6 +626,7 @@ const findAliasMatch = (
 } | null => {
   // Skip if it's an npm package import that doesn't match our alias
   const firstPathKey = Object.keys(paths)[0];
+  if (!firstPathKey) return null;
   const baseAlias = firstPathKey.replace("/*", "");
   if (importPath.startsWith("@") && !importPath.startsWith(baseAlias)) {
     return null;
@@ -797,6 +813,7 @@ async function processFile(
   for (const match of matches) {
     const originalQuote = match[1];
     const importPath = match[2];
+    if (!importPath) continue;
 
     // Skip if the import path doesn't start with the alias
     if (!importPath.startsWith(baseAlias)) {
@@ -899,7 +916,7 @@ async function processAllFiles({
 
     return results;
   } catch (error) {
-    log(
+    logger(
       `error processing directory ${srcDir}: ${error instanceof Error ? error.message : String(error)}`,
     );
     return [];
@@ -911,22 +928,23 @@ async function processAllFiles({
  */
 async function convertImportsAliasToRelative({
   targetDir,
-  aliasToReplace, // e.g. @, ~, @/*, ~/*
+  aliasToReplace,
   pathExtFilter,
 }: {
   targetDir: string;
   aliasToReplace: string;
   pathExtFilter: PathExtFilter;
 }): Promise<{ file: string; changes: { from: string; to: string }[] }[]> {
-  // ensure aliastoreplace has the wildcard pattern if it doesn't already
   const normalizedAlias = aliasToReplace.endsWith("/*")
     ? aliasToReplace
     : `${aliasToReplace}/*`;
 
-  log(
+  logger(
     `Converting aliased imports starting with '${aliasToReplace}' to relative paths in "${targetDir}"...`,
   );
-  log(`   (Assuming "${normalizedAlias}" resolves relative to "${targetDir}")`);
+  logger(
+    `   (Assuming "${normalizedAlias}" resolves relative to "${targetDir}")`,
+  );
   logInternal(`   (Using extension mode: ${pathExtFilter})`);
 
   const results = await processAllFiles({
@@ -938,19 +956,19 @@ async function convertImportsAliasToRelative({
   });
 
   if (results.length > 0) {
-    log("\n[convertImportsAliasToRelative] Summary of changes:");
+    logger("\n[convertImportsAliasToRelative] Summary of changes:", true);
     for (const { file, changes } of results) {
       const displayPath = relative(targetDir, file) || basename(file);
-      log(`  in ${displayPath}:`);
+      logger(() => `  in ${displayPath}:`, true);
       for (const { from, to } of changes) {
-        log(`    - ${from} → ${to}`);
+        logger(() => `    - ${from} → ${to}`, true);
       }
     }
   } else {
     // no aliased imports needing conversion were found
   }
 
-  log("Import path conversion process complete.");
+  logger("Import path conversion process complete.");
   return results;
 }
 
@@ -961,10 +979,12 @@ async function convertImportsExt({
   targetDir,
   extFrom,
   extTo,
+  alias,
 }: {
   targetDir: string;
   extFrom: ImportExtType;
   extTo: ImportExtType;
+  alias?: string;
 }): Promise<{ file: string; changes: { from: string; to: string }[] }[]> {
   logInternal(
     `Converting import extensions from '${extFrom}' to '${extTo}' in "${targetDir}"...`,
@@ -974,12 +994,62 @@ async function convertImportsExt({
   const fromExtStr = extFrom === "none" ? "" : `.${extFrom}`;
   const toExtStr = extTo === "none" ? "" : `.${extTo}`;
 
+  // Normalize alias to handle both @ and @/* formats
+  const normalizedAlias = alias
+    ? alias.endsWith("/*")
+      ? alias
+      : `${alias}/*`
+    : undefined;
+  const aliasPrefix = normalizedAlias?.replace("/*", "");
+
   // match import statements with the specified extension
   // this regex matches both standard imports and dynamic imports
+  // but only at the start of a line or after a semicolon/newline
   const importRegex = new RegExp(
-    `(?:import\\s+(?:[\\s\\S]*?)\\s+from\\s+|import\\s*\\(\\s*)\\s*(['"])([^'"]+${fromExtStr.replace(".", "\\.")})(\\1)`,
-    "g",
+    `(?:^|;|\\n)\\s*(?:import\\s+(?:[\\s\\S]*?)\\s+from\\s+|import\\s*\\(\\s*|export\\s+\\*\\s+from\\s+)\\s*(['"])([^'"]+${fromExtStr.replace(".", "\\.")})(\\1)`,
+    "gm",
   );
+
+  // Helper to determine if a path should be skipped
+  function shouldSkipPath(path: string): boolean {
+    // Skip built-in modules and package managers
+    if (
+      path.startsWith("node:") ||
+      path.startsWith("bun:") ||
+      path.startsWith("npm:") ||
+      path.startsWith("jsr:") ||
+      path.startsWith("node_modules")
+    )
+      return true;
+
+    // Handle alias paths if specified
+    if (aliasPrefix && path.startsWith(aliasPrefix)) {
+      return false; // Don't skip alias paths
+    }
+
+    // Skip package imports
+    // 1. Scoped packages (starting with @)
+    // 2. Simple package names (no / in the first segment)
+    // 3. Package names with subpaths (like package/subpath)
+    const segments = path.split("/");
+    const firstSegment = segments[0];
+    if (!firstSegment) return false;
+
+    if (
+      path.startsWith("@") || // scoped packages
+      !firstSegment.includes(".") || // simple package names
+      (firstSegment.includes("-") && !firstSegment.startsWith(".")) // hyphenated package names
+    )
+      return true;
+
+    // Skip URLs
+    if (path.startsWith("http://") || path.startsWith("https://")) return true;
+
+    // Skip if path already has the target extension
+    if (extTo !== "none" && path.endsWith(`.${extTo}`)) return true;
+
+    return false;
+  }
 
   try {
     const entries = await fs.readdir(targetDir, { withFileTypes: true });
@@ -997,6 +1067,7 @@ async function convertImportsExt({
             targetDir: fullPath,
             extFrom,
             extTo,
+            alias,
           });
 
           results.push(...subdirResults);
@@ -1012,6 +1083,13 @@ async function convertImportsExt({
           while (match !== null) {
             const quote = match[1];
             const importPath = match[2];
+            if (!importPath) continue;
+
+            // Skip paths that shouldn't be modified
+            if (shouldSkipPath(importPath)) {
+              match = importRegex.exec(updated);
+              continue;
+            }
 
             // compute replacement path
             let replacementPath: string;
@@ -1057,22 +1135,20 @@ async function convertImportsExt({
     );
 
     if (results.length > 0) {
-      log("\n[convertImportsExt] Summary of changes:");
+      logger("\n[convertImportsExt] Summary of changes:", true);
       for (const { file, changes } of results) {
         const displayPath = relative(targetDir, file) || basename(file);
-        log(`  in ${displayPath}:`);
+        logger(() => `  in ${displayPath}:`, true);
         for (const { from, to } of changes) {
-          log(`    - ${from} → ${to}`);
+          logger(() => `    - ${from} → ${to}`, true);
         }
       }
-    } else {
-      // no imports with extFrom extensions were found to convert
     }
 
     logInternal("Extension conversion complete.");
     return results;
   } catch (error) {
-    log(
+    logger(
       `error processing directory ${targetDir}: ${error instanceof Error ? error.message : String(error)}`,
     );
     return [];
@@ -1117,10 +1193,12 @@ function stripPathSegments(path: string, count = 1, alias = ""): string {
 
   const leadingPreservedSegments: string[] = [];
 
-  if (alias && pathSegments.length > 0 && pathSegments[0].startsWith(alias)) {
+  if (alias && pathSegments.length > 0 && pathSegments[0]?.startsWith(alias)) {
     const preserved = pathSegments.shift();
-    leadingPreservedSegments.push(preserved);
-    logInternal(`  - preserved alias segment: ${preserved}`);
+    if (preserved) {
+      leadingPreservedSegments.push(preserved);
+      logInternal(`  - preserved alias segment: ${preserved}`);
+    }
   }
 
   while (
@@ -1128,8 +1206,10 @@ function stripPathSegments(path: string, count = 1, alias = ""): string {
     (pathSegments[0] === DOT || pathSegments[0] === DOUBLE_DOT)
   ) {
     const preserved = pathSegments.shift();
-    leadingPreservedSegments.push(preserved);
-    logInternal(`  - preserved relative segment: ${preserved}`);
+    if (preserved) {
+      leadingPreservedSegments.push(preserved);
+      logInternal(`  - preserved relative segment: ${preserved}`);
+    }
   }
 
   const numToStrip = Math.min(count, pathSegments.length);
@@ -1180,8 +1260,14 @@ async function stripPathSegmentsInDirectory({
   alias?: string;
   extensionsToProcess?: string[];
 }): Promise<{ file: string; changes: { from: string; to: string }[] }[]> {
-  log(`[stripPathSegmentsInDirectory] Processing directory: ${targetDir}`);
-  log(`  - segmentsToStrip: ${segmentsToStrip}, alias: ${alias}`);
+  logger(
+    () => `[stripPathSegmentsInDirectory] Processing directory: ${targetDir}`,
+    true,
+  );
+  logger(
+    () => `  - segmentsToStrip: ${segmentsToStrip}, alias: ${alias}`,
+    true,
+  );
   logInternal(`  - extensions: ${JSON.stringify(extensionsToProcess)}`);
 
   try {
@@ -1217,6 +1303,7 @@ async function stripPathSegmentsInDirectory({
           for (const match of matches) {
             const originalQuote = match[1];
             const importPath = match[2];
+            if (!importPath) continue;
 
             if (!importPath.includes(SLASH)) {
               logInternal(`  - skipping non-path import: ${importPath}`);
@@ -1266,12 +1353,12 @@ async function stripPathSegmentsInDirectory({
     );
 
     if (results.length > 0) {
-      log("[stripPathSegmentsInDirectory] Summary of changes:");
+      logger(() => "[stripPathSegmentsInDirectory] Summary of changes:", true);
       for (const { file, changes } of results) {
         const displayPath = relative(targetDir, file) || basename(file);
-        log(`  in ${displayPath}:`);
+        logger(() => `  in ${displayPath}:`, true);
         for (const { from, to } of changes) {
-          log(`    - ${from} → ${to}`);
+          logger(() => `    - ${from} → ${to}`, true);
         }
       }
     } else {
@@ -1280,7 +1367,7 @@ async function stripPathSegmentsInDirectory({
 
     return results;
   } catch (error) {
-    log(
+    logger(
       `error processing directory ${targetDir}: ${error instanceof Error ? error.message : String(error)}`,
     );
     return [];
@@ -1414,6 +1501,7 @@ async function attachPathSegmentsInDirectory({
           for (const match of matches) {
             const originalQuote = match[1];
             const importPath = match[2];
+            if (!importPath) continue;
 
             // skip if path doesn't need processing
             if (!importPath.includes(SLASH)) continue;
@@ -1451,19 +1539,22 @@ async function attachPathSegmentsInDirectory({
     );
 
     if (results.length > 0) {
-      log("\n[attachPathSegmentsInDirectory] Summary of changes:");
+      logger(
+        () => "\n[attachPathSegmentsInDirectory] Summary of changes:",
+        true,
+      );
       for (const { file, changes } of results) {
         const displayPath = relative(targetDir, file) || basename(file);
-        log(`  in ${displayPath}:`);
+        logger(() => `  in ${displayPath}:`, true);
         for (const { from, to } of changes) {
-          log(`    - ${from} → ${to}`);
+          logger(() => `    - ${from} → ${to}`, true);
         }
       }
     }
 
     return results;
   } catch (error) {
-    log(
+    logger(
       `error processing directory ${targetDir}: ${error instanceof Error ? error.message : String(error)}`,
     );
     return [];
