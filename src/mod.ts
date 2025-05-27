@@ -1048,6 +1048,9 @@ async function convertImportsExt({
     // Skip if path already has the target extension
     if (extTo !== "none" && path.endsWith(`.${extTo}`)) return true;
 
+    // Only skip paths with extensions when extFrom is "none"
+    if (extFrom === "none" && /\.[^/]+$/.test(path)) return true;
+
     return false;
   }
 
@@ -1095,8 +1098,10 @@ async function convertImportsExt({
             let replacementPath: string;
 
             if (extFrom === "none") {
-              // adding extension to a path without extension
-              replacementPath = importPath + toExtStr;
+              // Only add extension if path doesn't already have one
+              replacementPath = /\.[^/]+$/.test(importPath)
+                ? importPath
+                : importPath + toExtStr;
             } else if (extTo === "none") {
               // removing extension
               replacementPath = importPath.slice(0, -fromExtStr.length);

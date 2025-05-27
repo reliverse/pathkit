@@ -135,6 +135,8 @@ interface ImportExportInfo {
   }[];
   start: number;              // Position in source
   end: number;
+  importExt?: string;         // Extension as written in import/export statement
+  realFileExt?: string;       // Likely actual file extension (e.g., .ts for .js imports)
 }
 ```
 
@@ -153,6 +155,8 @@ Features:
   - Detects path types (alias, relative, absolute, bare, module)
   - Extracts path prefixes (e.g., `@/`, `~/`)
   - Preserves original path format
+  - Tracks both import statement extensions and likely real file extensions
+  - Handles TypeScript/JavaScript extension conversion (e.g., `.js` → `.ts`)
 
 - 🎯 **Specifier Details**
   - Named imports/exports with aliases
@@ -187,13 +191,15 @@ Example output:
       name: "ref"
     }],
     start: 0,
-    end: 24
+    end: 24,
+    importExt: "",
+    realFileExt: ""
   },
   {
-    statement: 'import type { Config } from "./types"',
+    statement: 'import type { Config } from "./types.js"',
     type: "static",
     kind: "import",
-    source: "./types",
+    source: "./types.js",
     pathType: "relative",
     isTypeOnly: true,
     specifiers: [{
@@ -202,7 +208,9 @@ Example output:
       isType: true
     }],
     start: 45,
-    end: 85
+    end: 85,
+    importExt: ".js",
+    realFileExt: ".ts"
   }
 ]
 ```
@@ -262,10 +270,10 @@ The function intelligently handles different import types:
 
 - ✅ Relative imports (`./file`, `../file`)
 - ✅ Alias imports (when alias is specified)
-- ❌ Package imports (`lodash`, `@scope/pkg`)
-- ❌ Node built-ins (`node:path`, `node:fs`)
-- ❌ URLs (`http://`, `https://`)
-- ❌ Already processed paths
+- ✅ Package imports (`lodash`, `@scope/pkg`)
+- ✅ Node built-ins (`node:path`, `node:fs`)
+- ✅ URLs (`http://`, `https://`)
+- ✅ Already processed paths
 
 Features:
 
@@ -275,7 +283,51 @@ Features:
 - 📝 Detailed change logging
 - 🎨 Supports custom aliases
 
+### Path Segment Manipulation
+
+Manipulate path segments in import statements:
+
+```ts
+import { 
+  stripPathSegments,
+  stripPathSegmentsInDirectory,
+  attachPathSegments,
+  attachPathSegmentsInDirectory 
+} from "@reliverse/pathkit";
+
+// Strip segments from a path
+stripPathSegments("src/components/Button.tsx", 1);  // "components/Button.tsx"
+
+// Strip segments from imports in a directory
+await stripPathSegmentsInDirectory({
+  targetDir: "./src",
+  segmentsToStrip: 1,
+  alias: "@"  // Optional: preserve alias prefix
+});
+
+// Attach segments to a path
+attachPathSegments("Button.tsx", "components", {
+  position: "before",    // "before" | "after"
+  normalize: true,       // Normalize the path
+  ensureSlash: true,     // Ensure slash between segments
+  preserveRoot: true,    // Preserve root in absolute paths
+  preserveAlias: "@"     // Optional: preserve alias prefix
+});
+
+// Attach segments to imports in a directory
+await attachPathSegmentsInDirectory({
+  targetDir: "./src",
+  segments: "components",
+  options: {
+    position: "before",
+    preserveAlias: "@"
+  }
+});
+```
+
 ### Alias Resolution
+
+Advanced alias handling and resolution:
 
 ```ts
 import { 
@@ -296,6 +348,80 @@ console.log(resolveAlias("@/components", aliases));  // "/src/components"
 console.log(reverseResolveAlias("/src/utils", aliases));  // "@/utils"
 ```
 
+```ts
+import { 
+  normalizeAliases,
+  resolveAlias,
+  reverseResolveAlias,
+  findAliasMatch 
+} from "@reliverse/pathkit";
+
+// Normalize and optimize alias configurations
+const aliases = {
+  "@/": "/src/",
+  "~/": "/home/user/",
+  "@/components/": "/src/components/"  // Nested alias
+};
+const normalized = normalizeAliases(aliases);
+
+// Resolve aliased paths
+resolveAlias("@/components/Button", aliases);  // "/src/components/Button"
+
+// Convert absolute paths back to aliases
+reverseResolveAlias("/src/utils", aliases);   // ["@/utils"]
+
+// Find matching alias in tsconfig-style paths
+const paths = {
+  "@/*": ["./src/*"],
+  "~/*": ["./home/*"]
+};
+findAliasMatch("@/components/Button", paths);
+```
+
+### Path Conversion
+
+Convert between different path formats:
+
+```ts
+import { 
+  convertStringAliasRelative,
+  convertImportsAliasToRelative 
+} from "@reliverse/pathkit";
+
+// Convert a single aliased path to relative
+await convertStringAliasRelative({
+  importPath: "@/components/Button",
+  importerFile: "src/pages/Home.tsx",
+  pathPattern: "@/*",
+  targetDir: "src"
+});
+
+// Convert all aliased imports to relative in a directory
+await convertImportsAliasToRelative({
+  targetDir: "./src",
+  aliasToReplace: "@",
+  pathExtFilter: "js-ts-none"  // "js" | "ts" | "none" | "js-ts-none"
+});
+```
+
+### Platform-Specific Features
+
+Handle platform-specific path operations:
+
+```ts
+import { posix, win32 } from "@reliverse/pathkit";
+
+// Use platform-specific path handling
+const path = process.platform === "win32" ? win32 : posix;
+
+// Windows-specific features
+win32.toNamespacedPath("C:\\path\\to\\file");  // "\\\\?\\C:\\path\\to\\file"
+win32.delimiter;  // ";"
+
+// POSIX-specific features
+posix.delimiter;  // ":"
+```
+
 ### Utility Functions
 
 ```ts
@@ -308,6 +434,38 @@ import {
 console.log(filename("/path/component.vue"));     // "component"
 console.log(normalizeQuotes("import 'pkg'"));     // 'import "pkg"'
 console.log(matchesGlob("file.ts", "**/*.ts"));  // true
+```
+
+```ts
+import { 
+  filename,
+  normalizeWindowsPath,
+  replaceAllInString 
+} from "@reliverse/pathkit";
+
+// Get filename without extension
+filename("/path/to/file.ts");  // "file"
+
+// Normalize Windows paths
+normalizeWindowsPath("C:\\path\\to\\file");  // "C:/path/to/file"
+
+// Replace strings while tracking position
+replaceAllInString("import x from 'y'", "'y'", "'z'");
+```
+
+### Supported File Extensions
+
+The library supports the following file extensions by default:
+
+```ts
+const EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
+```
+
+### Type Definitions
+
+```ts
+type PathExtFilter = "js" | "ts" | "none" | "js-ts-none";
+type ImportExtType = "js" | "ts" | "none";
 ```
 
 ## Use Cases / Ideal For

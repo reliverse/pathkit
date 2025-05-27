@@ -17,6 +17,8 @@ export interface ImportExportInfo {
   specifiers?: ImportExportSpecifier[];
   start: number;
   end: number;
+  importExt?: string; // path extension as written in import/export
+  realFileExt?: string; // actual file extension
 }
 
 export interface GetFileImportsExportsOptions {
@@ -39,6 +41,70 @@ export function getFileImportsExports(
   } = options;
 
   const results: ImportExportInfo[] = [];
+
+  // helper to get path extension from import/export statements
+  function getImportExtension(path: string): string {
+    // Handle empty paths
+    if (!path) return "";
+
+    // Find the last dot in the path
+    const lastDotIndex = path.lastIndexOf(".");
+
+    // If no dot found or dot is at the start/end of path, return empty string
+    if (lastDotIndex <= 0 || lastDotIndex === path.length - 1) {
+      return "";
+    }
+
+    // Get the extension including the dot
+    const extension = path.slice(lastDotIndex);
+
+    // Handle special cases for TypeScript/JavaScript
+    // If the path ends with .d.ts, return the full extension
+    if (path.endsWith(".d.ts")) {
+      return ".d.ts";
+    }
+
+    // For other cases, return the extension as is
+    // This preserves the extension as written in the import/export statement
+    // e.g., './file.js' will return '.js' even if the actual file is .ts
+    return extension;
+  }
+
+  // helper to determine real file extension
+  function getRealFileExtension(
+    path: string,
+    pathType: ImportExportInfo["pathType"],
+  ): string {
+    // For bare imports and aliases, we can't determine the real extension
+    if (pathType === "bare" || pathType === "alias") {
+      return "";
+    }
+
+    // For module URLs, return the extension from the URL
+    if (pathType === "module") {
+      return getImportExtension(path);
+    }
+
+    // For relative and absolute paths, try to determine the real extension
+    const pathExt = getImportExtension(path);
+
+    // If no extension in path, return empty
+    if (!pathExt) return "";
+
+    // Handle TypeScript/JavaScript cases
+    if (pathExt === ".js" || pathExt === ".jsx") {
+      // If it's a .js/.jsx import, the real file might be .ts/.tsx
+      return pathExt === ".jsx" ? ".tsx" : ".ts";
+    }
+
+    if (pathExt === ".ts" || pathExt === ".tsx") {
+      // If it's already .ts/.tsx, that's the real extension
+      return pathExt;
+    }
+
+    // For other extensions, return as is
+    return pathExt;
+  }
 
   // regex patterns for different import/export types
   const patterns = {
@@ -160,6 +226,8 @@ export function getFileImportsExports(
         specifiers: extractSpecifiers(match[0]),
         start: match.index ?? 0,
         end: (match.index ?? 0) + match[0].length,
+        importExt: getImportExtension(source),
+        realFileExt: getRealFileExtension(source, pathType),
       };
 
       results.push(info);
@@ -186,6 +254,8 @@ export function getFileImportsExports(
         specifiers: [],
         start: match.index ?? 0,
         end: (match.index ?? 0) + match[0].length,
+        importExt: getImportExtension(source),
+        realFileExt: getRealFileExtension(source, pathType),
       };
 
       results.push(info);
@@ -215,6 +285,8 @@ export function getFileImportsExports(
         specifiers: extractSpecifiers(match[0]),
         start: match.index ?? 0,
         end: (match.index ?? 0) + match[0].length,
+        importExt: getImportExtension(source),
+        realFileExt: getRealFileExtension(source, pathType),
       };
 
       results.push(info);
@@ -234,6 +306,8 @@ export function getFileImportsExports(
         specifiers: [{ type: "default", name: "default" }],
         start: match.index,
         end: match.index + match[0].length,
+        importExt: undefined,
+        realFileExt: undefined,
       };
 
       results.push(info);
@@ -256,6 +330,8 @@ export function getFileImportsExports(
         specifiers: [{ type: "named", name }],
         start: match.index,
         end: match.index + match[0].length,
+        importExt: undefined,
+        realFileExt: undefined,
       };
 
       results.push(info);

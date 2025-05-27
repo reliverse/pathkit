@@ -7,7 +7,7 @@ import { defineConfig } from "@reliverse/dler";
  */
 export default defineConfig({
   // Bump configuration
-  bumpDisable: false,
+  bumpDisable: true,
   bumpFilter: ["package.json", ".config/rse.ts"],
   bumpMode: "patch",
 
