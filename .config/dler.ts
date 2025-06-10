@@ -1,13 +1,13 @@
-import { defineConfig } from "@reliverse/dler";
+import { defineConfigDler } from "@reliverse/cfg";
 
 /**
  * Reliverse Bundler Configuration
  * Hover over a field to see more details
  * @see https://github.com/reliverse/dler
  */
-export default defineConfig({
+export default defineConfigDler({
   // Bump configuration
-  bumpDisable: true,
+  bumpDisable: false,
   bumpFilter: ["package.json", ".config/rse.ts"],
   bumpMode: "patch",
 
@@ -28,16 +28,14 @@ export default defineConfig({
   // JSR-only config
   distJsrAllowDirty: true,
   distJsrBuilder: "jsr",
-  distJsrCopyRootFiles: ["README.md", "LICENSE"],
   distJsrDirName: "dist-jsr",
   distJsrDryRun: false,
   distJsrGenTsconfig: false,
   distJsrOutFilesExt: "ts",
-  distJsrSlowTypes: true,
+  distJsrSlowTypes: false,
 
   // NPM-only config
   distNpmBuilder: "mkdist",
-  distNpmCopyRootFiles: ["README.md", "LICENSE"],
   distNpmDirName: "dist-npm",
   distNpmOutFilesExt: "js",
 
@@ -56,7 +54,7 @@ export default defineConfig({
 
   // Dependency filtering
   // Global is always applied
-  removeDepsPatterns: {
+  filterDepsPatterns: {
     global: [
       "@types",
       "biome",

@@ -7,6 +7,5 @@
     "**/*.config.{ts,js}",
     "src/**/*mod.ts"
   ],
-  "ignore": ["dist*", "@next/mod.ts"],
-  "ignoreDependencies": ["@reliverse/rse"]
+  "ignore": ["dist*", "@next/mod.ts"]
 }

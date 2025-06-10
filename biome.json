@@ -22,7 +22,8 @@
     "rules": {
       "recommended": true,
       "style": {
-        "noParameterAssign": "off"
+        "noParameterAssign": "off",
+        "noUnusedTemplateLiteral": "off"
       },
       "suspicious": {
         "noExplicitAny": "off"

@@ -12,18 +12,27 @@ import path, {
 const ALIAS = "@";
 const E_SRC = "e-src";
 const E_DIST = "e-dist";
-const MODE = "none" as PathExtFilter;
+const EXT_TO_SEARCH_IN_PATHS = "js-ts-none" as PathExtFilter;
 const TEST_JS_TO_TS_CONVERSION = false;
+const PROJECT_WITH_TYPESCRIPT = false;
 
 // pick ext once per file
 function getExt(): string {
-  if (MODE === "js") return ".js";
-  if (MODE === "ts") return ".ts";
-  if (MODE === "none") return "";
-  const choices = [".js", ".ts", ""];
-  const ext = choices[Math.floor(Math.random() * choices.length)];
+  if (EXT_TO_SEARCH_IN_PATHS === "js") return ".js";
+  if (EXT_TO_SEARCH_IN_PATHS === "ts") return ".ts";
+  if (EXT_TO_SEARCH_IN_PATHS === "none") return "";
+  if (EXT_TO_SEARCH_IN_PATHS === "js-ts-none") {
+    const choices = PROJECT_WITH_TYPESCRIPT
+      ? [".ts", ".tsx", ""]
+      : [".js", ".jsx", ""];
+    const ext = choices[Math.floor(Math.random() * choices.length)] || "";
+    console.log(`chose extension: ${ext || "(none)"}`);
+    return ext;
+  }
+  const choices = PROJECT_WITH_TYPESCRIPT ? [".ts", ".tsx"] : [".js", ".jsx"];
+  const ext = choices[Math.floor(Math.random() * choices.length)] || "";
   console.log(`chose extension: ${ext || "(none)"}`);
-  return ext ?? "";
+  return ext;
 }
 
 // note: `file` has no extension here
@@ -31,11 +40,23 @@ const samples = [
   {
     file: "utils/formatters",
     template: () =>
-      `
+      PROJECT_WITH_TYPESCRIPT
+        ? `
 export function formatDate(date: Date): string {
   return date.toLocaleDateString()
 }
 export function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(amount)
+}
+`.trim()
+        : `
+export function formatDate(date) {
+  return date.toLocaleDateString()
+}
+export function formatCurrency(amount) {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
@@ -46,10 +67,24 @@ export function formatCurrency(amount: number): string {
   {
     file: "components/ui/Button",
     template: (ext: string) =>
-      `
+      PROJECT_WITH_TYPESCRIPT
+        ? `
 import { formatCurrency } from "${ALIAS}/utils/formatters${ext}"
 interface ButtonProps { price?: number; label: string }
 export function Button({ price, label }: ButtonProps) {
+  return {
+    render: () => {
+      const displayText = price
+        ? \`\${label} (\${formatCurrency(price)})\`
+        : label
+      return \`<button>\${displayText}</button>\`
+    },
+  }
+}
+`.trim()
+        : `
+import { formatCurrency } from "${ALIAS}/utils/formatters${ext}"
+export function Button({ price, label }) {
   return {
     render: () => {
       const displayText = price
@@ -64,7 +99,19 @@ export function Button({ price, label }: ButtonProps) {
   {
     file: "components/layout/Header",
     template: (ext: string) =>
-      `
+      PROJECT_WITH_TYPESCRIPT
+        ? `
+import { Button } from "${ALIAS}/components/ui/Button${ext}"
+export function Header() {
+  return {
+    render: () => {
+      const loginButton = Button({ label: "Login" })
+      return \`<header>\${loginButton.render()}</header>\`
+    },
+  }
+}
+`.trim()
+        : `
 import { Button } from "${ALIAS}/components/ui/Button${ext}"
 export function Header() {
   return {
@@ -79,7 +126,26 @@ export function Header() {
   {
     file: "index",
     template: (ext: string) =>
-      `
+      PROJECT_WITH_TYPESCRIPT
+        ? `
+import { Header } from "${ALIAS}/components/layout/Header${ext}"
+import { Button } from "${ALIAS}/components/ui/Button${ext}"
+import { formatDate } from "${ALIAS}/utils/formatters${ext}"
+
+console.log("Today is", formatDate(new Date()))
+const buyButton = Button({ price: 99.99, label: "Buy Now" })
+const header = Header()
+
+console.log(buyButton.render())
+console.log(header.render())
+
+async function loadHelpers() {
+  const m = await import("${ALIAS}/utils/formatters${ext}")
+  console.log("loaded:", Object.keys(m))
+}
+void loadHelpers()
+`.trim()
+        : `
 import { Header } from "${ALIAS}/components/layout/Header${ext}"
 import { Button } from "${ALIAS}/components/ui/Button${ext}"
 import { formatDate } from "${ALIAS}/utils/formatters${ext}"
@@ -118,12 +184,71 @@ async function createSampleFiles() {
   await Promise.all(
     samples.map(async ({ file, template }) => {
       const ext = getExt();
-      const fullPath = path.join(E_SRC, `${file}.ts`);
+      const fullPath = path.join(
+        E_SRC,
+        `${file}${PROJECT_WITH_TYPESCRIPT ? ".ts" : ".js"}`,
+      );
       await fs.writeFile(fullPath, template(ext));
       log(`created ${fullPath}`);
+
+      // Generate .d.ts file for .js files when not using TypeScript
+      if (!PROJECT_WITH_TYPESCRIPT && !ext.endsWith("x")) {
+        const dtsPath = path.join(E_SRC, `${file}.d.ts`);
+        const dtsContent = generateDtsContent(file, ext);
+        await fs.writeFile(dtsPath, dtsContent);
+        log(`created ${dtsPath}`);
+      }
     }),
   );
   log("✓ created sample files in e-src");
+}
+
+function generateDtsContent(file: string, ext: string): string {
+  switch (file) {
+    case "utils/formatters":
+      return `
+export function formatDate(date: Date): string;
+export function formatCurrency(amount: number): string;
+`.trim();
+
+    case "components/ui/Button":
+      return `
+import { formatCurrency } from "${ALIAS}/utils/formatters${ext}";
+
+interface ButtonProps {
+  price?: number;
+  label: string;
+}
+
+export function Button(props: ButtonProps): {
+  render: () => string;
+};
+`.trim();
+
+    case "components/layout/Header":
+      return `
+import { Button } from "${ALIAS}/components/ui/Button${ext}";
+
+export function Header(): {
+  render: () => string;
+};
+`.trim();
+
+    case "index":
+      return `
+import { Header } from "${ALIAS}/components/layout/Header${ext}";
+import { Button } from "${ALIAS}/components/ui/Button${ext}";
+import { formatDate } from "${ALIAS}/utils/formatters${ext}";
+
+declare const buyButton: ReturnType<typeof Button>;
+declare const header: ReturnType<typeof Header>;
+
+declare function loadHelpers(): Promise<void>;
+`.trim();
+
+    default:
+      return "";
+  }
 }
 
 async function analyzeImportsExports(filePath: string): Promise<void> {
@@ -155,7 +280,9 @@ async function main(): Promise<void> {
 
   // Demonstrate import/export analysis
   log("\n📦 Example: Analyzing imports and exports");
-  const sampleFiles = samples.map((s) => path.join(E_SRC, `${s.file}.ts`));
+  const sampleFiles = samples.map((s) =>
+    path.join(E_SRC, `${s.file}${PROJECT_WITH_TYPESCRIPT ? ".ts" : ".js"}`),
+  );
   for (const file of sampleFiles) {
     await analyzeImportsExports(file);
   }
@@ -186,11 +313,11 @@ async function main(): Promise<void> {
   await convertImportsAliasToRelative({
     targetDir: E_DIST,
     aliasToReplace: ALIAS,
-    pathExtFilter: MODE,
+    pathExtFilter: EXT_TO_SEARCH_IN_PATHS,
   });
 
   // Convert extensions
-  if (MODE === "js" && TEST_JS_TO_TS_CONVERSION) {
+  if (EXT_TO_SEARCH_IN_PATHS === "js" && TEST_JS_TO_TS_CONVERSION) {
     log("\n📦 Converting extensions from .js to .ts");
     await convertImportsExt({
       targetDir: E_DIST,
