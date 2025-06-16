@@ -1013,12 +1013,12 @@ async function convertImportsAliasToRelative({
     ? aliasToReplace
     : `${aliasToReplace}/*`;
 
-  regularLogger(
-    `Converting aliased imports starting with '${aliasToReplace}' to relative paths in "${targetDir}"...`,
-  );
-  regularLogger(
-    `   (Assuming "${normalizedAlias}" resolves relative to "${targetDir}")`,
-  );
+  // regularLogger(
+  //   `Converting aliased imports starting with '${aliasToReplace}' to relative paths in "${targetDir}"...`,
+  // );
+  // regularLogger(
+  //   `   (Assuming "${normalizedAlias}" resolves relative to "${targetDir}")`,
+  // );
   logInternal(`   (Using extension mode: ${pathExtFilter})`);
 
   const results = await processAllFiles({
@@ -1041,7 +1041,7 @@ async function convertImportsAliasToRelative({
     }
   }
 
-  regularLogger("Import/export path conversion process complete.");
+  // regularLogger("Import/export path conversion process complete.");
   return results;
 }
 

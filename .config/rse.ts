@@ -11,7 +11,7 @@ export default defineConfigRse({
   projectAuthor: "reliverse",
   projectDescription:
     "@reliverse/pathkit is a slash‑consistent, cross‑platform path manipulation, with POSIX forward slash, drop‑in for node:path and unjs/pathe. This library extends the node:path module with a set of functions for manipulating file paths.",
-  version: "1.3.3",
+  version: "1.3.4",
   projectLicense: "MIT",
   projectState: "creating",
   projectRepository: "https://github.com/reliverse/pathkit",
